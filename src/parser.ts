@@ -39,6 +39,11 @@ export function parseReservations(csvText: string): Reservation[] {
       breakdown: (rec['内訳'] ?? '').trim() || undefined,
       memo: (rec['予約メモ'] ?? '').trim() || undefined,
       media: (rec['媒体'] ?? '').trim() || undefined,
+      customerMemo: (rec['予約者メモ'] ?? '').trim() || undefined,
+      totalAmount: (rec['合計金額'] ?? '').trim() || undefined,
+      supExperience: (rec['●予約者のSUP経験の有無'] ?? '').trim() || undefined,
+      companions: (rec['●同行者の名前(カナ)とSUP経験の有無'] ?? '').trim() || undefined,
+      howFound: (rec['●ご予約の経緯'] ?? '').trim() || undefined,
     });
   }
   return out;

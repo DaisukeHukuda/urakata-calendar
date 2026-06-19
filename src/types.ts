@@ -9,6 +9,11 @@ export interface Reservation {
   breakdown?: string;
   memo?: string;
   media?: string;
+  customerMemo?: string;
+  totalAmount?: string;
+  supExperience?: string;
+  companions?: string;
+  howFound?: string;
 }
 
 export interface SyncConfig {

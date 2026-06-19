@@ -3,6 +3,8 @@ import type { Reservation } from './types.js';
 export interface ReservationDTO {
   reservationId: string; courseName: string; startISO: string;
   pax: number; customerName: string; phone?: string; status: string;
+  customerMemo?: string; totalAmount?: string; breakdown?: string;
+  supExperience?: string; companions?: string; howFound?: string;
 }
 
 export function toDTOs(reservations: Reservation[]): ReservationDTO[] {
@@ -14,6 +16,12 @@ export function toDTOs(reservations: Reservation[]): ReservationDTO[] {
     customerName: r.customerName,
     phone: r.phone,
     status: r.status,
+    customerMemo: r.customerMemo,
+    totalAmount: r.totalAmount,
+    breakdown: r.breakdown,
+    supExperience: r.supExperience,
+    companions: r.companions,
+    howFound: r.howFound,
   }));
 }
 
