@@ -2,6 +2,38 @@ import { google, calendar_v3 } from 'googleapis';
 import type { CalendarClient, CalendarEvent } from './types.js';
 
 const TZ = 'Asia/Tokyo';
+const WRITE_THROTTLE_MS = 120; // 書き込み間隔（バースト緩和）
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// レート制限(403 rateLimitExceeded / 429)や一時的なサーバーエラー(5xx)はリトライ対象
+function isRetryable(err: any): boolean {
+  const code = err?.code ?? err?.status;
+  if (code === 429 || code === 500 || code === 503) return true;
+  if (code === 403) {
+    const reasons = (err?.errors ?? []).map((e: any) => e?.reason);
+    return reasons.includes('rateLimitExceeded') || reasons.includes('userRateLimitExceeded');
+  }
+  return false;
+}
+
+async function withRetry<T>(fn: () => Promise<T>, attempts = 5): Promise<T> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (!isRetryable(err) || i === attempts - 1) throw err;
+      lastErr = err;
+      const delay = 1000 * 2 ** i + Math.floor(Math.random() * 250);
+      console.warn(`[calendar] rate limited, retry ${i + 1}/${attempts - 1} after ${delay}ms`);
+      await sleep(delay);
+    }
+  }
+  throw lastErr;
+}
 
 export class GoogleCalendarClient implements CalendarClient {
   private cal: calendar_v3.Calendar;
@@ -19,14 +51,14 @@ export class GoogleCalendarClient implements CalendarClient {
     const ids: string[] = [];
     let pageToken: string | undefined;
     do {
-      const res = await this.cal.events.list({
+      const res = await withRetry(() => this.cal.events.list({
         calendarId: this.calendarId,
         timeMin: opts.timeMin.toISOString(),
         timeMax: opts.timeMax.toISOString(),
         singleEvents: true,
         maxResults: 2500,
         pageToken,
-      });
+      }));
       for (const e of res.data.items ?? []) {
         if (e.id && e.id.startsWith(opts.idPrefix)) ids.push(e.id);
       }
@@ -45,21 +77,23 @@ export class GoogleCalendarClient implements CalendarClient {
       end: { dateTime: event.end.toISOString(), timeZone: TZ },
     };
     try {
-      await this.cal.events.insert({ calendarId: this.calendarId, requestBody: body });
+      await withRetry(() => this.cal.events.insert({ calendarId: this.calendarId, requestBody: body }));
     } catch (err: any) {
       if (err?.code === 409) {
-        await this.cal.events.update({ calendarId: this.calendarId, eventId: event.id, requestBody: body });
+        await withRetry(() => this.cal.events.update({ calendarId: this.calendarId, eventId: event.id, requestBody: body }));
       } else {
         throw err;
       }
     }
+    await sleep(WRITE_THROTTLE_MS);
   }
 
   async deleteEvent(id: string): Promise<void> {
     try {
-      await this.cal.events.delete({ calendarId: this.calendarId, eventId: id });
+      await withRetry(() => this.cal.events.delete({ calendarId: this.calendarId, eventId: id }));
     } catch (err: any) {
       if (err?.code !== 404 && err?.code !== 410) throw err;
     }
+    await sleep(WRITE_THROTTLE_MS);
   }
 }
