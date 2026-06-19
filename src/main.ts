@@ -4,7 +4,7 @@ import { csvToEvents, parseReservations } from './parser.js';
 import { syncEvents } from './syncer.js';
 import { GoogleCalendarClient } from './google-calendar.js';
 import { DEFAULT_SYNC_CONFIG } from './types.js';
-import { publishToWeb } from './web-publish.js';
+import { publishToWeb, countRepeats, publishRepeats } from './web-publish.js';
 
 async function run(): Promise<void> {
   const cfg = loadConfig(process.env);
@@ -36,6 +36,17 @@ async function run(): Promise<void> {
       console.log(`[sync] web published ${reservations.length} reservations`);
     } catch (e) {
       console.error('[sync] web publish failed (calendar sync unaffected):', e);
+    }
+    try {
+      const historyCsv = await fetchReservationsCsv({
+        baseUrl: cfg.baseUrl, loginId: cfg.loginId, password: cfg.password,
+        from: new Date('2015-01-01T00:00:00+09:00'), to: now, statuses: ['joined'],
+      });
+      const repeats = countRepeats(parseReservations(historyCsv));
+      await publishRepeats(webUrl, webSecret, repeats);
+      console.log(`[sync] repeats published for ${Object.keys(repeats).length} phones`);
+    } catch (e) {
+      console.error('[sync] repeats publish failed (calendar sync unaffected):', e);
     }
   }
 }
