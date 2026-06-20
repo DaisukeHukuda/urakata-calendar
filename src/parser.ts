@@ -34,6 +34,7 @@ export function parseReservations(csvText: string): Reservation[] {
       start: parsed.start,
       pax: Number.parseInt((rec['合計'] ?? '0').trim(), 10) || 0,
       customerName: (rec['予約者名'] ?? '').trim(),
+      customerKana: (rec['予約者名カナ'] ?? '').trim() || undefined,
       status: (rec['ステータス'] ?? '').trim(),
       phone: (rec['電話番号'] ?? '').trim() || undefined,
       breakdown: (rec['内訳'] ?? '').trim() || undefined,

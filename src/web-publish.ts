@@ -2,7 +2,7 @@ import type { Reservation } from './types.js';
 
 export interface ReservationDTO {
   reservationId: string; courseName: string; startISO: string;
-  pax: number; customerName: string; phone?: string; status: string;
+  pax: number; customerName: string; customerKana?: string; phone?: string; status: string;
   customerMemo?: string; totalAmount?: string; breakdown?: string;
   supExperience?: string; companions?: string; howFound?: string;
 }
@@ -14,6 +14,7 @@ export function toDTOs(reservations: Reservation[]): ReservationDTO[] {
     startISO: r.start.toISOString(),
     pax: r.pax,
     customerName: r.customerName,
+    customerKana: r.customerKana,
     phone: r.phone,
     status: r.status,
     customerMemo: r.customerMemo,

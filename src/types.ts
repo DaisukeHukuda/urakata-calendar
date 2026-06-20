@@ -4,6 +4,7 @@ export interface Reservation {
   start: Date;
   pax: number;
   customerName: string;
+  customerKana?: string;
   status: string;
   phone?: string;
   breakdown?: string;
