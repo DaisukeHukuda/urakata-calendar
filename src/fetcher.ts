@@ -60,7 +60,8 @@ export async function fetchReservationsCsv(o: FetchOptions): Promise<string> {
 
     // --- 認証済みクッキーを共有する request コンテキストでCSVを取得 ---
     const csvUrl = buildCsvUrl(o);
-    const resp = await context.request.get(csvUrl);
+    // 履歴(2015〜)CSVは大きいためタイムアウトを延長（既定30秒→2分）
+    const resp = await context.request.get(csvUrl, { timeout: 120000 });
     if (!resp.ok()) {
       throw new Error(`CSV取得に失敗しました: HTTP ${resp.status()} ${csvUrl}`);
     }
