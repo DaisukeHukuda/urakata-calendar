@@ -27,9 +27,11 @@ async function run(): Promise<void> {
   const result = await syncEvents(events, client, { timeMin: from, timeMax: to, prefix: DEFAULT_SYNC_CONFIG.idPrefix });
   console.log(`[sync] calendar created=${result.created} updated=${result.updated} deleted=${result.deleted}`);
 
-  const webUrl = (process.env.WEB_INGEST_URL ?? '').trim();
-  const webSecret = (process.env.WEB_INGEST_SECRET ?? '').trim();
-  if (webUrl && webSecret) {
+  // Web公開先URLはコードに固定（公開情報。Secret取り違え・改行混入を防ぐ）
+  const webUrl = 'https://supsup-urakata-calendar.ymty.workers.dev';
+  // Secretは空白・改行を除去（貼り付け時の混入対策）
+  const webSecret = (process.env.WEB_INGEST_SECRET ?? '').replace(/\s/g, '');
+  if (webSecret) {
     try {
       const reservations = parseReservations(csv).filter(r => ['予約確定', '仮予約'].includes(r.status));
       await publishToWeb(webUrl, webSecret, reservations);
