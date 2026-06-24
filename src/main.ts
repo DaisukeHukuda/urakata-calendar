@@ -4,7 +4,7 @@ import { csvToEvents, parseReservations } from './parser.js';
 import { syncEvents } from './syncer.js';
 import { GoogleCalendarClient } from './google-calendar.js';
 import { DEFAULT_SYNC_CONFIG } from './types.js';
-import { publishToWeb, countRepeats, publishRepeats } from './web-publish.js';
+import { publishToWeb, countRepeats, publishRepeats, selectForWeb } from './web-publish.js';
 
 async function run(): Promise<void> {
   const cfg = loadConfig(process.env);
@@ -17,7 +17,7 @@ async function run(): Promise<void> {
   console.log(`[sync] fetch ${from.toISOString()} .. ${to.toISOString()}`);
   const csv = await fetchReservationsCsv({
     baseUrl: cfg.baseUrl, loginId: cfg.loginId, password: cfg.password,
-    from, to, statuses: ['fixed', 'temporary_fixed'],
+    from, to, statuses: ['fixed', 'temporary_fixed', 'joined'],
   });
 
   const events = csvToEvents(csv, DEFAULT_SYNC_CONFIG);
@@ -33,7 +33,7 @@ async function run(): Promise<void> {
   const webSecret = (process.env.WEB_INGEST_SECRET ?? '').replace(/\s/g, '');
   if (webSecret) {
     try {
-      const reservations = parseReservations(csv).filter(r => ['予約確定', '仮予約'].includes(r.status));
+      const reservations = selectForWeb(parseReservations(csv));
       await publishToWeb(webUrl, webSecret, reservations);
       console.log(`[sync] web published ${reservations.length} reservations`);
     } catch (e) {
