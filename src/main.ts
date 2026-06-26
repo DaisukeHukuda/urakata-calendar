@@ -40,9 +40,12 @@ async function run(): Promise<void> {
       console.error('[sync] web publish failed (calendar sync unaffected):', e);
     }
     try {
+      // 当日の「参加済」を集計に含めると、その日の予約自体がリピーター扱いになってしまうため、
+      // リピート回数は「前日まで」の参加実績で集計する。
+      const repeatsTo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
       const historyCsv = await fetchReservationsCsv({
         baseUrl: cfg.baseUrl, loginId: cfg.loginId, password: cfg.password,
-        from: new Date('2015-01-01T00:00:00+09:00'), to: now, statuses: ['joined'],
+        from: new Date('2015-01-01T00:00:00+09:00'), to: repeatsTo, statuses: ['joined'],
       });
       const repeats = countRepeats(parseReservations(historyCsv));
       await publishRepeats(webUrl, webSecret, repeats);
