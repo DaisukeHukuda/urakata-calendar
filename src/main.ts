@@ -4,7 +4,8 @@ import { csvToEvents, parseReservations } from './parser.js';
 import { syncEvents } from './syncer.js';
 import { GoogleCalendarClient } from './google-calendar.js';
 import { DEFAULT_SYNC_CONFIG } from './types.js';
-import { publishToWeb, countRepeats, publishRepeats, selectForWeb } from './web-publish.js';
+import { publishToWeb, countRepeats, publishRepeats, selectForWeb, publishForms } from './web-publish.js';
+import { parseConsent, parseEmergency, matchForms, readSheetValues } from './forms.js';
 
 async function run(): Promise<void> {
   const cfg = loadConfig(process.env);
@@ -52,6 +53,19 @@ async function run(): Promise<void> {
       console.log(`[sync] repeats published for ${Object.keys(repeats).length} phones`);
     } catch (e) {
       console.error('[sync] repeats publish failed (calendar sync unaffected):', e);
+    }
+    try {
+      // 回答シート（公開情報のID。秘密ではない）
+      const SHEET_CONSENT = '1QzGBhtOLy89KvdPVOALg7_yTRnJZvz0ynS2hg2kSZSM';
+      const SHEET_EMERGENCY = '12Y9HEiAjICMFVNjmjH0ndLixkdAORhkcCFQmHtr3ADY';
+      const webReservations = selectForWeb(parseReservations(csv));
+      const consent = parseConsent(await readSheetValues(cfg.serviceAccountJson, SHEET_CONSENT));
+      const emergency = parseEmergency(await readSheetValues(cfg.serviceAccountJson, SHEET_EMERGENCY));
+      const formsMap = matchForms(webReservations, consent, emergency);
+      await publishForms(webUrl, webSecret, formsMap);
+      console.log(`[sync] forms published for ${Object.keys(formsMap).length} reservations`);
+    } catch (e) {
+      console.error('[sync] forms publish failed (calendar sync unaffected):', e);
     }
   }
 }
