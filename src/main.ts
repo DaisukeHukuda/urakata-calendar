@@ -4,7 +4,7 @@ import { csvToEvents, parseReservations } from './parser.js';
 import { syncEvents } from './syncer.js';
 import { GoogleCalendarClient } from './google-calendar.js';
 import { DEFAULT_SYNC_CONFIG } from './types.js';
-import { publishToWeb, countRepeats, publishRepeats, selectForWeb, publishForms } from './web-publish.js';
+import { publishToWeb, repeatVisitDates, publishRepeats, selectForWeb, publishForms } from './web-publish.js';
 import { parseConsent, parseEmergency, matchForms, readSheetValues } from './forms.js';
 
 async function run(): Promise<void> {
@@ -41,14 +41,11 @@ async function run(): Promise<void> {
       console.error('[sync] web publish failed (calendar sync unaffected):', e);
     }
     try {
-      // 当日の「参加済」を集計に含めると、その日の予約自体がリピーター扱いになってしまうため、
-      // リピート回数は「前日まで」の参加実績で集計する。
-      const repeatsTo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
       const historyCsv = await fetchReservationsCsv({
         baseUrl: cfg.baseUrl, loginId: cfg.loginId, password: cfg.password,
-        from: new Date('2015-01-01T00:00:00+09:00'), to: repeatsTo, statuses: ['joined'],
+        from: new Date('2015-01-01T00:00:00+09:00'), to: now, statuses: ['joined'],
       });
-      const repeats = countRepeats(parseReservations(historyCsv));
+      const repeats = repeatVisitDates(parseReservations(historyCsv));
       await publishRepeats(webUrl, webSecret, repeats);
       console.log(`[sync] repeats published for ${Object.keys(repeats).length} phones`);
     } catch (e) {

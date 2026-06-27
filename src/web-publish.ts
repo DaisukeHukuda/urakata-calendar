@@ -47,19 +47,26 @@ function normPhone(s?: string): string {
   return (s ?? '').replace(/[^0-9]/g, '');
 }
 
-export function countRepeats(reservations: Reservation[]): Record<string, number> {
-  const counts: Record<string, number> = {};
+function jstDateOf(d: Date): string {
+  const j = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+  return `${j.getUTCFullYear()}-${String(j.getUTCMonth() + 1).padStart(2, '0')}-${String(j.getUTCDate()).padStart(2, '0')}`;
+}
+
+export function repeatVisitDates(reservations: Reservation[]): Record<string, string[]> {
+  const sets: Record<string, Set<string>> = {};
   for (const r of reservations) {
     if (r.status !== '参加済') continue;
     if (r.courseName.includes('L')) continue;
     const phone = normPhone(r.phone);
     if (!phone || /^0+$/.test(phone)) continue;
-    counts[phone] = (counts[phone] ?? 0) + 1;
+    (sets[phone] ??= new Set<string>()).add(jstDateOf(r.start));
   }
-  return counts;
+  const out: Record<string, string[]> = {};
+  for (const [p, set] of Object.entries(sets)) out[p] = [...set].sort();
+  return out;
 }
 
-export async function publishRepeats(url: string, secret: string, repeats: Record<string, number>): Promise<void> {
+export async function publishRepeats(url: string, secret: string, repeats: Record<string, string[]>): Promise<void> {
   const resp = await fetch(`${url.replace(/\/$/, '')}/ingest-repeats`, {
     method: 'POST',
     headers: { 'authorization': `Bearer ${secret}`, 'content-type': 'application/json' },
