@@ -1,4 +1,5 @@
 import type { Reservation } from './types.js';
+import type { FormStatus } from './forms.js';
 
 // Webカレンダーへ公開するステータス。参加済も含める（実施後も当日の予約を表示し続けるため）。
 export const WEB_PUBLISH_STATUSES = new Set(['予約確定', '仮予約', '参加済']);
@@ -65,4 +66,13 @@ export async function publishRepeats(url: string, secret: string, repeats: Recor
     body: JSON.stringify(repeats),
   });
   if (!resp.ok) throw new Error(`repeats ingest failed: HTTP ${resp.status}`);
+}
+
+export async function publishForms(url: string, secret: string, map: Record<string, FormStatus>): Promise<void> {
+  const resp = await fetch(`${url.replace(/\/$/, '')}/ingest-forms`, {
+    method: 'POST',
+    headers: { 'authorization': `Bearer ${secret}`, 'content-type': 'application/json' },
+    body: JSON.stringify(map),
+  });
+  if (!resp.ok) throw new Error(`forms ingest failed: HTTP ${resp.status}`);
 }
