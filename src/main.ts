@@ -1,5 +1,5 @@
 import { loadConfig } from './config.js';
-import { fetchReservationsCsv } from './fetcher.js';
+import { fetchReservationsCsv, fetchReservationsCsvRanges, yearlyRanges } from './fetcher.js';
 import { csvToEvents, parseReservations } from './parser.js';
 import { syncEvents } from './syncer.js';
 import { GoogleCalendarClient } from './google-calendar.js';
@@ -41,11 +41,15 @@ async function run(): Promise<void> {
       console.error('[sync] web publish failed (calendar sync unaffected):', e);
     }
     try {
-      const historyCsv = await fetchReservationsCsv({
-        baseUrl: cfg.baseUrl, loginId: cfg.loginId, password: cfg.password,
-        from: new Date('2015-01-01T00:00:00+09:00'), to: now, statuses: ['joined'],
-      });
-      const repeats = repeatVisitDates(parseReservations(historyCsv));
+      // 履歴(2015〜)CSVは一括取得だと重く504になるため、暦年レンジに分割して取得・連結する
+      const ranges = yearlyRanges(new Date('2015-01-01T00:00:00+09:00'), now);
+      const bodies = await fetchReservationsCsvRanges(
+        { baseUrl: cfg.baseUrl, loginId: cfg.loginId, password: cfg.password, statuses: ['joined'] },
+        ranges,
+        { retries: 2 },
+      );
+      const history = bodies.flatMap((b) => parseReservations(b));
+      const repeats = repeatVisitDates(history);
       await publishRepeats(webUrl, webSecret, repeats);
       console.log(`[sync] repeats published for ${Object.keys(repeats).length} phones`);
     } catch (e) {
