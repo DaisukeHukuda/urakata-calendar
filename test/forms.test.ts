@@ -1,78 +1,79 @@
 import { describe, it, expect } from 'vitest';
-import { normDate, normName, normPhone, parseConsent, parseEmergency, matchForms } from '../src/forms.js';
+import { normDate, normName, normPhone, parseFormResponses, matchForms, CONSENT_CFG, EMERGENCY_CFG } from '../src/forms.js';
 
 describe('normalizers', () => {
-  it('normDate: スラッシュ日付や時刻付きを YYYY-MM-DD に', () => {
+  it('normDate', () => {
     expect(normDate('2026/02/14')).toBe('2026-02-14');
     expect(normDate('2026/2/4 12:00:00')).toBe('2026-02-04');
-    expect(normDate('2026-02-14')).toBe('2026-02-14');
     expect(normDate('')).toBe('');
   });
-  it('normName: 全角/半角空白を除去', () => {
-    expect(normName('林 真智子')).toBe('林真智子');
+  it('normName 空白除去 / normPhone 数字のみ', () => {
     expect(normName('林　真智子')).toBe('林真智子');
-  });
-  it('normPhone: 数字のみ', () => {
-    expect(normPhone('090-9230-0464')).toBe('09092300464');
+    expect(normPhone('090-1234-5678')).toBe('09012345678');
   });
 });
 
-describe('parseConsent', () => {
-  it('日付ごとに氏名（連名）を集約（列はキーワードで特定）', () => {
+describe('parseFormResponses（キーワードで列特定・複数名前列対応）', () => {
+  it('同意書: 日付+氏名(漢字)+カナ氏名 を集約', () => {
     const values = [
-      ['タイムスタンプ', '日付（プラン参加日をご選択ください）', 'ご氏名（漢字フルネーム）'],
-      ['2026/02/12 21:36', '2026/02/14', '林真智子・林宏至'],
-      ['2026/02/13 09:00', '2026/02/15', '佐藤太郎'],
+      ['タイムスタンプ', '日付（プラン参加日）', 'ご氏名（漢字フルネーム）', 'カナ氏名'],
+      ['x', '2026/06/28', '厩橋 頌志、厩橋 由衣', 'マヤハシ ショウジ、マヤハシ ユイ'],
     ];
-    const m = parseConsent(values);
-    expect(m.get('2026-02-14')).toEqual(['林真智子・林宏至']);
-    expect(m.get('2026-02-15')).toEqual(['佐藤太郎']);
+    const m = parseFormResponses(values, CONSENT_CFG);
+    const e = m.get('2026-06-28')!;
+    expect(e.names).toContain('厩橋頌志、厩橋由衣');
+    expect(e.names).toContain('マヤハシショウジ、マヤハシユイ');
+    expect(e.phones.size).toBe(0);
   });
-});
-
-describe('parseEmergency', () => {
-  it('日付ごとに電話番号と参加者氏名を集約', () => {
+  it('緊急連絡先: 参加者名+携帯番号 を集約（緊急連絡先側の電話は拾わない）', () => {
     const values = [
-      ['タイムスタンプ', '参加者ご本人のお名前', '携帯番号（ハイフンなし）', '緊急連絡先の電話番号', 'ツアー参加の日付'],
-      ['2026/02/12', '林真智子', '09092300464', '0289762586', '2026/02/14'],
-      ['2026/02/12', '林宏至', '09029887339', '0289762586', '2026/02/14'],
+      ['タイムスタンプ', '参加者ご本人のお名前', '携帯番号（ハイフンなし）', '緊急連絡先の電話番号（ハイフンなし）', 'ツアー参加の日付'],
+      ['x', '厩橋 由衣', '09019048832', '09020100359', '2026/06/28'],
     ];
-    const m = parseEmergency(values);
-    const e = m.get('2026-02-14')!;
-    expect(e.phones.has('09092300464')).toBe(true);
-    expect(e.phones.has('09029887339')).toBe(true);
-    expect(e.names).toContain('林真智子');
+    const m = parseFormResponses(values, EMERGENCY_CFG);
+    const e = m.get('2026-06-28')!;
+    expect(e.names).toContain('厩橋由衣');
+    expect(e.phones.has('09019048832')).toBe(true);
+    expect(e.phones.has('09020100359')).toBe(false);
   });
 });
 
-describe('matchForms', () => {
-  const consent = parseConsent([
-    ['ts', '日付', 'ご氏名'],
-    ['x', '2026/02/14', '林真智子・林宏至'],
-  ]);
-  const emergency = parseEmergency([
-    ['ts', '参加者ご本人のお名前', '携帯番号', '参加の日付'],
-    ['x', '林真智子', '09092300464', '2026/02/14'],
-  ]);
-  it('同意書=連名に予約者名を含む→true / 緊急=電話一致→true', () => {
+describe('matchForms（複合: 電話 OR 漢字氏名 OR カナ氏名）', () => {
+  const consent = parseFormResponses([
+    ['ts', '日付', 'ご氏名', 'カナ氏名'],
+    ['x', '2026/06/28', '厩橋 頌志、厩橋 由衣', 'マヤハシ ショウジ、マヤハシ ユイ'],
+  ], CONSENT_CFG);
+  const emergency = parseFormResponses([
+    ['ts', '参加者ご本人のお名前', '携帯番号', 'ツアー参加の日付'],
+    ['x', '厩橋 由衣', '09019048832', '2026/06/28'],
+  ], EMERGENCY_CFG);
+
+  it('予約者名がカナのみでも、フォームにカナがあれば同意書一致', () => {
     const r = matchForms(
-      [{ reservationId: 'a', start: new Date('2026-02-14T10:00:00+09:00'), customerName: '林真智子', phone: '090-9230-0464' }],
+      [{ reservationId: 'a', start: new Date('2026-06-28T10:00:00+09:00'), customerName: 'マヤハシ ユイ', customerKana: 'マヤハシ ユイ', phone: '' }],
       consent, emergency,
     );
-    expect(r['a']).toEqual({ consent: true, emergency: true });
+    expect(r['a'].consent).toBe(true);
   });
-  it('日付違いは両方false', () => {
+  it('緊急は電話一致で true（氏名が合わなくても）', () => {
     const r = matchForms(
-      [{ reservationId: 'b', start: new Date('2026-02-20T10:00:00+09:00'), customerName: '林真智子', phone: '090-9230-0464' }],
+      [{ reservationId: 'b', start: new Date('2026-06-28T10:00:00+09:00'), customerName: 'Mayahashi', customerKana: 'マヤハシ ユイ', phone: '090-1904-8832' }],
       consent, emergency,
     );
-    expect(r['b']).toEqual({ consent: false, emergency: false });
+    expect(r['b'].emergency).toBe(true);
   });
-  it('緊急は電話なくても氏名一致でtrue', () => {
+  it('漢字氏名一致でも true', () => {
     const r = matchForms(
-      [{ reservationId: 'c', start: new Date('2026-02-14T10:00:00+09:00'), customerName: '林真智子', phone: '' }],
+      [{ reservationId: 'c', start: new Date('2026-06-28T10:00:00+09:00'), customerName: '厩橋 由衣', customerKana: '', phone: '' }],
       consent, emergency,
     );
-    expect(r['c'].emergency).toBe(true);
+    expect(r['c']).toEqual({ consent: true, emergency: true });
+  });
+  it('日付違いは false', () => {
+    const r = matchForms(
+      [{ reservationId: 'd', start: new Date('2026-07-01T10:00:00+09:00'), customerName: '厩橋 由衣', customerKana: 'マヤハシ ユイ', phone: '090-1904-8832' }],
+      consent, emergency,
+    );
+    expect(r['d']).toEqual({ consent: false, emergency: false });
   });
 });

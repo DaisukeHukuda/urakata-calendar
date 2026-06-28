@@ -18,68 +18,63 @@ function jstDateOf(d: Date): string {
   const j = new Date(d.getTime() + 9 * 60 * 60 * 1000);
   return `${j.getUTCFullYear()}-${String(j.getUTCMonth() + 1).padStart(2, '0')}-${String(j.getUTCDate()).padStart(2, '0')}`;
 }
-function colIndex(header: string[], keyword: string): number {
-  return header.findIndex((h) => (h ?? '').includes(keyword));
+
+function colIndexes(header: string[], keywords: string[]): number[] {
+  const idx: number[] = [];
+  header.forEach((h, i) => { if (keywords.some((k) => (h ?? '').includes(k))) idx.push(i); });
+  return idx;
 }
 
-// 同意書: 参加日 → 氏名（連名フィールド）配列
-export function parseConsent(values: string[][]): Map<string, string[]> {
-  const out = new Map<string, string[]>();
-  if (!values.length) return out;
-  const header = values[0];
-  const di = colIndex(header, '日付');
-  const ni = colIndex(header, '氏名');
-  if (di < 0 || ni < 0) return out;
-  for (let r = 1; r < values.length; r++) {
-    const row = values[r];
-    const d = normDate(row[di] ?? '');
-    const name = normName(row[ni] ?? '');
-    if (!d || !name) continue;
-    const list = out.get(d) ?? [];
-    list.push(name);
-    out.set(d, list);
-  }
-  return out;
-}
+export interface FormIndexEntry { names: string[]; phones: Set<string> }
 
-// 緊急連絡先: 参加日 → { 携帯番号集合, 参加者氏名配列 }
-export function parseEmergency(values: string[][]): Map<string, { phones: Set<string>; names: string[] }> {
-  const out = new Map<string, { phones: Set<string>; names: string[] }>();
+// 回答シートを「参加日 → {氏名(漢字/カナ等), 電話}」に索引化。列はキーワードで特定（名前・電話は複数列対応）。
+export function parseFormResponses(
+  values: string[][],
+  cfg: { dateKeywords: string[]; nameKeywords: string[]; phoneKeywords: string[] },
+): Map<string, FormIndexEntry> {
+  const out = new Map<string, FormIndexEntry>();
   if (!values.length) return out;
   const header = values[0];
-  const di = colIndex(header, '参加の日付') >= 0 ? colIndex(header, '参加の日付') : colIndex(header, '日付');
-  const pi = colIndex(header, '携帯番号');
-  const ni = colIndex(header, '参加者');
-  if (di < 0) return out;
+  const dateIdx = colIndexes(header, cfg.dateKeywords)[0];
+  if (dateIdx === undefined) return out;
+  const nameIdxs = colIndexes(header, cfg.nameKeywords);
+  const phoneIdxs = colIndexes(header, cfg.phoneKeywords);
   for (let r = 1; r < values.length; r++) {
     const row = values[r];
-    const d = normDate(row[di] ?? '');
+    const d = normDate(row[dateIdx] ?? '');
     if (!d) continue;
-    const e = out.get(d) ?? { phones: new Set<string>(), names: [] };
-    const ph = pi >= 0 ? normPhone(row[pi] ?? '') : '';
-    if (ph) e.phones.add(ph);
-    const nm = ni >= 0 ? normName(row[ni] ?? '') : '';
-    if (nm) e.names.push(nm);
+    const e = out.get(d) ?? { names: [], phones: new Set<string>() };
+    for (const ni of nameIdxs) { const nm = normName(row[ni] ?? ''); if (nm) e.names.push(nm); }
+    for (const pi of phoneIdxs) { const ph = normPhone(row[pi] ?? ''); if (ph) e.phones.add(ph); }
     out.set(d, e);
   }
   return out;
 }
 
+// 列特定キーワード。フォームに「カナ氏名」「携帯番号」が追加されれば自動で拾う。
+export const CONSENT_CFG = { dateKeywords: ['日付'], nameKeywords: ['氏名', 'カナ', 'ふりがな', 'フリガナ'], phoneKeywords: ['携帯', '電話'] };
+export const EMERGENCY_CFG = { dateKeywords: ['参加の日付', '日付'], nameKeywords: ['参加者', 'カナ', 'ふりがな', 'フリガナ'], phoneKeywords: ['携帯番号'] };
+
+function entryMatches(e: FormIndexEntry | undefined, nameCands: string[], phone: string): boolean {
+  if (!e) return false;
+  if (phone && e.phones.has(phone)) return true;
+  return nameCands.some((c) => !!c && e.names.some((n) => n.includes(c) || c.includes(n)));
+}
+
 export function matchForms(
-  reservations: { reservationId: string; start: Date; customerName: string; phone?: string }[],
-  consent: Map<string, string[]>,
-  emergency: Map<string, { phones: Set<string>; names: string[] }>,
+  reservations: { reservationId: string; start: Date; customerName: string; customerKana?: string; phone?: string }[],
+  consent: Map<string, FormIndexEntry>,
+  emergency: Map<string, FormIndexEntry>,
 ): Record<string, FormStatus> {
   const out: Record<string, FormStatus> = {};
   for (const rv of reservations) {
     const d = jstDateOf(rv.start);
-    const n = normName(rv.customerName);
+    const cands = [normName(rv.customerName), normName(rv.customerKana ?? '')].filter((s) => !!s);
     const p = normPhone(rv.phone ?? '');
-    const cNames = consent.get(d) ?? [];
-    const consentDone = !!n && cNames.some((cn) => cn.includes(n));
-    const e = emergency.get(d);
-    const emergencyDone = !!e && ((!!p && e.phones.has(p)) || (!!n && e.names.some((en) => en.includes(n))));
-    out[rv.reservationId] = { consent: consentDone, emergency: emergencyDone };
+    out[rv.reservationId] = {
+      consent: entryMatches(consent.get(d), cands, p),
+      emergency: entryMatches(emergency.get(d), cands, p),
+    };
   }
   return out;
 }
