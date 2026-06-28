@@ -6,6 +6,7 @@ import { GoogleCalendarClient } from './google-calendar.js';
 import { DEFAULT_SYNC_CONFIG } from './types.js';
 import { publishToWeb, repeatVisitDates, publishRepeats, selectForWeb, publishForms } from './web-publish.js';
 import { parseFormResponses, CONSENT_CFG, EMERGENCY_CFG, matchForms, readSheetValues } from './forms.js';
+import { shouldSyncHistory, parseHistoryHours } from './schedule.js';
 
 async function run(): Promise<void> {
   const cfg = loadConfig(process.env);
@@ -40,20 +41,28 @@ async function run(): Promise<void> {
     } catch (e) {
       console.error('[sync] web publish failed (calendar sync unaffected):', e);
     }
-    try {
-      // 履歴(2015〜)CSVは一括取得だと重く504になるため、暦年レンジに分割して取得・連結する
-      const ranges = yearlyRanges(new Date('2015-01-01T00:00:00+09:00'), now);
-      const bodies = await fetchReservationsCsvRanges(
-        { baseUrl: cfg.baseUrl, loginId: cfg.loginId, password: cfg.password, statuses: ['joined'] },
-        ranges,
-        { retries: 2 },
-      );
-      const history = bodies.flatMap((b) => parseReservations(b));
-      const repeats = repeatVisitDates(history);
-      await publishRepeats(webUrl, webSecret, repeats);
-      console.log(`[sync] repeats published for ${Object.keys(repeats).length} phones`);
-    } catch (e) {
-      console.error('[sync] repeats publish failed (calendar sync unaffected):', e);
+    // 履歴(2015〜)スイープは重く504を招くため、毎回は実行しない。
+    // JSTの特定時刻(既定3時台)に走った同期、または手動実行(workflow_dispatch)時のみフル取得する。
+    const manualRun = process.env.GITHUB_EVENT_NAME === 'workflow_dispatch';
+    const runHistory = manualRun || shouldSyncHistory(now, parseHistoryHours(process.env.HISTORY_SYNC_HOURS));
+    if (runHistory) {
+      try {
+        // 履歴CSVは一括取得だと重く504になるため、暦年レンジに分割して取得・連結する
+        const ranges = yearlyRanges(new Date('2015-01-01T00:00:00+09:00'), now);
+        const bodies = await fetchReservationsCsvRanges(
+          { baseUrl: cfg.baseUrl, loginId: cfg.loginId, password: cfg.password, statuses: ['joined'] },
+          ranges,
+          { retries: 2 },
+        );
+        const history = bodies.flatMap((b) => parseReservations(b));
+        const repeats = repeatVisitDates(history);
+        await publishRepeats(webUrl, webSecret, repeats);
+        console.log(`[sync] repeats published for ${Object.keys(repeats).length} phones`);
+      } catch (e) {
+        console.error('[sync] repeats publish failed (calendar sync unaffected):', e);
+      }
+    } else {
+      console.log('[sync] history sweep skipped (light run)');
     }
     try {
       // 回答シート（公開情報のID。秘密ではない）
