@@ -25,57 +25,80 @@ function colIndexes(header: string[], keywords: string[]): number[] {
   return idx;
 }
 
-export interface FormIndexEntry { names: string[]; phones: Set<string> }
+export interface FormResponse { date: string; names: string[]; phones: Set<string> }
 
-// 回答シートを「参加日 → {氏名(漢字/カナ等), 電話}」に索引化。列はキーワードで特定（名前・電話は複数列対応）。
+// 回答シートを「回答の配列」に変換。日付は任意項目として保持（照合の必須キーにはしない）。
 export function parseFormResponses(
   values: string[][],
   cfg: { dateKeywords: string[]; nameKeywords: string[]; phoneKeywords: string[] },
-): Map<string, FormIndexEntry> {
-  const out = new Map<string, FormIndexEntry>();
+): FormResponse[] {
+  const out: FormResponse[] = [];
   if (!values.length) return out;
   const header = values[0];
   const dateIdx = colIndexes(header, cfg.dateKeywords)[0];
-  if (dateIdx === undefined) return out;
   const nameIdxs = colIndexes(header, cfg.nameKeywords);
   const phoneIdxs = colIndexes(header, cfg.phoneKeywords);
   for (let r = 1; r < values.length; r++) {
     const row = values[r];
-    const d = normDate(row[dateIdx] ?? '');
-    if (!d) continue;
-    const e = out.get(d) ?? { names: [], phones: new Set<string>() };
-    for (const ni of nameIdxs) { const nm = normName(row[ni] ?? ''); if (nm) e.names.push(nm); }
-    for (const pi of phoneIdxs) { const ph = normPhone(row[pi] ?? ''); if (ph) e.phones.add(ph); }
-    out.set(d, e);
+    const date = dateIdx === undefined ? '' : normDate(row[dateIdx] ?? '');
+    const names: string[] = [];
+    for (const ni of nameIdxs) { const nm = normName(row[ni] ?? ''); if (nm) names.push(nm); }
+    const phones = new Set<string>();
+    for (const pi of phoneIdxs) { const ph = normPhone(row[pi] ?? ''); if (ph) phones.add(ph); }
+    if (!names.length && !phones.size) continue;
+    out.push({ date, names, phones });
   }
   return out;
+}
+
+// 'YYYY-MM-DD' 2つの絶対日数差。
+export function dayDiff(a: string, b: string): number {
+  const ta = Date.parse(a + 'T00:00:00Z');
+  const tb = Date.parse(b + 'T00:00:00Z');
+  return Math.abs(ta - tb) / 86400000;
 }
 
 // 列特定キーワード。フォームに「カナ氏名」「携帯番号」が追加されれば自動で拾う。
 export const CONSENT_CFG = { dateKeywords: ['日付'], nameKeywords: ['氏名', 'カナ', 'ふりがな', 'フリガナ'], phoneKeywords: ['携帯', '電話'] };
 export const EMERGENCY_CFG = { dateKeywords: ['参加の日付', '日付'], nameKeywords: ['参加者', 'カナ', 'ふりがな', 'フリガナ'], phoneKeywords: ['携帯番号'] };
 
-function entryMatches(e: FormIndexEntry | undefined, nameCands: string[], phone: string): boolean {
-  if (!e) return false;
-  if (phone && e.phones.has(phone)) return true;
-  return nameCands.some((c) => !!c && e.names.some((n) => n.includes(c) || c.includes(n)));
+// 回答 f が予約（氏名候補 cands / 電話 phone）に一致するか。日付は見ない。
+function responseMatches(f: FormResponse, cands: string[], phone: string): boolean {
+  if (phone && f.phones.has(phone)) return true;
+  return cands.some((c) => !!c && f.names.some((n) => n.includes(c) || c.includes(n)));
 }
 
 export function matchForms(
   reservations: { reservationId: string; start: Date; customerName: string; customerKana?: string; phone?: string }[],
-  consent: Map<string, FormIndexEntry>,
-  emergency: Map<string, FormIndexEntry>,
+  consent: FormResponse[],
+  emergency: FormResponse[],
 ): Record<string, FormStatus> {
+  const rinfo = reservations.map((rv) => ({
+    id: rv.reservationId,
+    rdate: jstDateOf(rv.start),
+    cands: [normName(rv.customerName), normName(rv.customerKana ?? '')].filter((s) => !!s),
+    phone: normPhone(rv.phone ?? ''),
+  }));
   const out: Record<string, FormStatus> = {};
-  for (const rv of reservations) {
-    const d = jstDateOf(rv.start);
-    const cands = [normName(rv.customerName), normName(rv.customerKana ?? '')].filter((s) => !!s);
-    const p = normPhone(rv.phone ?? '');
-    out[rv.reservationId] = {
-      consent: entryMatches(consent.get(d), cands, p),
-      emergency: entryMatches(emergency.get(d), cands, p),
-    };
-  }
+  for (const r of rinfo) out[r.id] = { consent: false, emergency: false };
+
+  const assign = (responses: FormResponse[], key: 'consent' | 'emergency'): void => {
+    for (const f of responses) {
+      const matched = rinfo.filter((r) => responseMatches(f, r.cands, r.phone));
+      if (matched.length === 0) continue;
+      let targets = matched;
+      if (matched.length > 1 && f.date) {
+        let best = matched[0];
+        for (const r of matched) {
+          if (dayDiff(f.date, r.rdate) < dayDiff(f.date, best.rdate)) best = r;
+        }
+        targets = [best];
+      }
+      for (const r of targets) out[r.id][key] = true;
+    }
+  };
+  assign(consent, 'consent');
+  assign(emergency, 'emergency');
   return out;
 }
 
