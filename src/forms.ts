@@ -8,10 +8,10 @@ export function normDate(s: string): string {
   return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
 }
 export function normName(s: string): string {
-  return (s ?? '').replace(/[\s　]/g, '');
+  return (s ?? '').normalize('NFKC').replace(/[\s　]/g, '');
 }
 export function normPhone(s: string): string {
-  return (s ?? '').replace(/[^0-9]/g, '');
+  return (s ?? '').normalize('NFKC').replace(/[^0-9]/g, '');
 }
 
 function jstDateOf(d: Date): string {

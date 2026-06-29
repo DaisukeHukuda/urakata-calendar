@@ -11,6 +11,11 @@ describe('normalizers', () => {
     expect(normName('林　真智子')).toBe('林真智子');
     expect(normPhone('090-1234-5678')).toBe('09012345678');
   });
+  it('NFKC: 全角数字・半角カナを正規化', () => {
+    expect(normPhone('０９０２５５９８０４１')).toBe('09025598041'); // 全角数字
+    expect(normPhone('090 1352 7617')).toBe('09013527617');       // 半角空白
+    expect(normName('ﾏﾔﾊｼ ﾕｲ')).toBe('マヤハシユイ');               // 半角カナ→全角＋空白除去
+  });
 });
 
 describe('parseFormResponses（キーワードで列特定・複数名前列対応）', () => {
