@@ -42,9 +42,8 @@ async function run(): Promise<void> {
       console.error('[sync] web publish failed (calendar sync unaffected):', e);
     }
     // 履歴(2015〜)スイープは重く504を招くため、毎回は実行しない。
-    // JSTの特定時刻(既定3時台)に走った同期、または手動実行(workflow_dispatch)時のみフル取得する。
-    const manualRun = process.env.GITHUB_EVENT_NAME === 'workflow_dispatch';
-    const runHistory = manualRun || shouldSyncHistory(now, parseHistoryHours(process.env.HISTORY_SYNC_HOURS));
+    // JSTの特定時刻(既定3時台)に走った同期のときのみフル取得する。
+    const runHistory = shouldSyncHistory(now, parseHistoryHours(process.env.HISTORY_SYNC_HOURS));
     if (runHistory) {
       try {
         // 履歴CSVは一括取得だと重く504になるため、暦年レンジに分割して取得・連結する
