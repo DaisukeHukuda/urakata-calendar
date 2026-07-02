@@ -1,0 +1,44 @@
+name: urakata-reminder
+on:
+  workflow_dispatch:
+    inputs:
+      reservation_id:
+        description: '予約ID（指定するとその1件のみに送信。空なら一括: 今日＋明日の未記入者）'
+        required: false
+        default: ''
+concurrency:
+  group: urakata-remind
+  cancel-in-progress: false
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
+      - run: npm run remind
+        env:
+          URAKATA_URL: ${{ secrets.URAKATA_URL }}
+          URAKATA_LOGIN_ID: ${{ secrets.URAKATA_LOGIN_ID }}
+          URAKATA_PASSWORD: ${{ secrets.URAKATA_PASSWORD }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          WEB_INGEST_SECRET: ${{ secrets.WEB_INGEST_SECRET }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          FORM_URL_CONSENT: ${{ secrets.FORM_URL_CONSENT }}
+          FORM_URL_EMERGENCY: ${{ secrets.FORM_URL_EMERGENCY }}
+          REMINDER_TEST_EMAIL: ${{ secrets.REMINDER_TEST_EMAIL }}
+          REMINDER_DRY_RUN: ${{ vars.REMINDER_DRY_RUN }}
+          REMINDER_TARGET_ID: ${{ inputs.reservation_id }}
