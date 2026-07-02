@@ -633,7 +633,12 @@ PAT に workflow スコープが無いため Claude は push 不可。`https://g
 ```yaml
 name: urakata-reminder
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      reservation_id:
+        description: '予約ID（指定するとその1件のみに送信。空なら一括: 今日＋明日の未記入者）'
+        required: false
+        default: ''
 concurrency:
   group: urakata-remind
   cancel-in-progress: false
@@ -669,6 +674,7 @@ jobs:
           FORM_URL_EMERGENCY: ${{ secrets.FORM_URL_EMERGENCY }}
           REMINDER_TEST_EMAIL: ${{ secrets.REMINDER_TEST_EMAIL }}
           REMINDER_DRY_RUN: ${{ vars.REMINDER_DRY_RUN }}
+          REMINDER_TARGET_ID: ${{ inputs.reservation_id }}
 ```
 
 - [ ] **Step 3: ユーザー作業 — リポジトリ変数でドライランON**
