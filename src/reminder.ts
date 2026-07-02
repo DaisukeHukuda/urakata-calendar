@@ -52,9 +52,9 @@ export function selectReminderTargets(
   return { targets, noEmail };
 }
 
-// 例: "7/3(金) 10:00"（Node ICUのja-JP出力。月/日は数字、曜日は括弧付き短縮形）
+// 例: "7月3日(金) 10:00"（month:'long' で「7月」表記になる）
 const JST_FMT = new Intl.DateTimeFormat('ja-JP', {
-  timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric',
+  timeZone: 'Asia/Tokyo', month: 'long', day: 'numeric',
   weekday: 'short', hour: '2-digit', minute: '2-digit',
 });
 

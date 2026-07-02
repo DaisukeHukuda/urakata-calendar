@@ -81,7 +81,7 @@ describe('buildReminderEmail', () => {
     const { subject, text } = buildReminderEmail(base, urls);
     expect(subject).toBe('【Sup! Sup!】同意書・緊急連絡先ご記入のお願い');
     expect(text).toContain('山田太郎 様');
-    expect(text).toContain('7/3(金) 10:00');
+    expect(text).toContain('7月3日(金) 10:00');
     expect(text).toContain('SUP体験プラン');
     expect(text).toContain('https://forms.gle/CONSENT');
     expect(text).toContain('https://forms.gle/EMERGENCY');
