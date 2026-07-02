@@ -83,7 +83,8 @@ async function run(): Promise<void> {
   }
 
   const urls = { consent: req('FORM_URL_CONSENT'), emergency: req('FORM_URL_EMERGENCY') };
-  const smtp = { user: req('GMAIL_USER'), appPassword: req('GMAIL_APP_PASSWORD') };
+  // アプリパスワードはGoogleの表示が「xxxx xxxx xxxx xxxx」なので空白混入を除去
+  const smtp = { user: req('GMAIL_USER'), appPassword: req('GMAIL_APP_PASSWORD').replace(/\s/g, '') };
   const testEmail = (env.REMINDER_TEST_EMAIL ?? '').trim() || undefined;
   if (testEmail) console.log(`[remind] TEST MODE: all mails to ${testEmail}`);
 
