@@ -51,3 +51,35 @@ export function selectReminderTargets(
   }
   return { targets, noEmail };
 }
+
+// 例: "7/3(金) 10:00"（Node ICUのja-JP出力。月/日は数字、曜日は括弧付き短縮形）
+const JST_FMT = new Intl.DateTimeFormat('ja-JP', {
+  timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric',
+  weekday: 'short', hour: '2-digit', minute: '2-digit',
+});
+
+export function buildReminderEmail(
+  t: ReminderTarget,
+  urls: { consent: string; emergency: string },
+): { subject: string; text: string } {
+  const when = JST_FMT.format(t.start);
+  const sections: string[] = [];
+  if (t.missingConsent) sections.push(`■ 参加同意書\n${urls.consent}`);
+  if (t.missingEmergency) sections.push(`■ 緊急連絡先\n${urls.emergency}`);
+  const text = `${t.customerName} 様
+
+Sup! Sup!（日光・中禅寺湖）です。
+${when}〜 ${t.courseName} にご参加予定の皆さまへ、事前フォームのご記入のお願いです。
+
+以下のフォームがまだ確認できておりません。
+当日の受付をスムーズにするため、参加前日までのご記入をお願いいたします。
+
+${sections.join('\n\n')}
+
+※すでにご記入いただいていた場合は、行き違いのためご容赦ください。
+※このメールは送信専用です。ご不明点は予約時のご案内先までご連絡ください。
+
+Sup! Sup!
+`;
+  return { subject: '【Sup! Sup!】同意書・緊急連絡先ご記入のお願い', text };
+}

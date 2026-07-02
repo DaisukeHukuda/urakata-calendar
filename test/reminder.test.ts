@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { endOfTomorrowJst, selectReminderTargets } from '../src/reminder.js';
+import { endOfTomorrowJst, selectReminderTargets, buildReminderEmail } from '../src/reminder.js';
 import type { Reservation } from '../src/types.js';
 
 const NOW = new Date('2026-07-02T09:00:00+09:00');
@@ -67,5 +67,28 @@ describe('selectReminderTargets', () => {
     const res = selectReminderTargets([r], noForms, NOW);
     expect(res.targets).toHaveLength(0);
     expect(res.noEmail).toBe(1);
+  });
+});
+
+describe('buildReminderEmail', () => {
+  const urls = { consent: 'https://forms.gle/CONSENT', emergency: 'https://forms.gle/EMERGENCY' };
+  const base = {
+    reservationId: 'r1', email: 'taro@example.com', customerName: '山田太郎',
+    courseName: 'SUP体験プラン', start: new Date('2026-07-03T10:00:00+09:00'),
+    missingConsent: true, missingEmergency: true,
+  };
+  it('氏名・日時(JST)・コース名・両フォームURLを含む', () => {
+    const { subject, text } = buildReminderEmail(base, urls);
+    expect(subject).toBe('【Sup! Sup!】同意書・緊急連絡先ご記入のお願い');
+    expect(text).toContain('山田太郎 様');
+    expect(text).toContain('7/3(金) 10:00');
+    expect(text).toContain('SUP体験プラン');
+    expect(text).toContain('https://forms.gle/CONSENT');
+    expect(text).toContain('https://forms.gle/EMERGENCY');
+  });
+  it('未記入のフォームURLだけ載せる', () => {
+    const { text } = buildReminderEmail({ ...base, missingConsent: false }, urls);
+    expect(text).not.toContain('https://forms.gle/CONSENT');
+    expect(text).toContain('https://forms.gle/EMERGENCY');
   });
 });
