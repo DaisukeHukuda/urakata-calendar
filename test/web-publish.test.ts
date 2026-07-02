@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { toDTOs, selectForWeb } from '../src/web-publish.js';
+import { describe, it, expect, vi } from 'vitest';
+import { toDTOs, selectForWeb, fetchReminded, publishReminded } from '../src/web-publish.js';
 import type { Reservation } from '../src/types.js';
 
 const res: Reservation = {
@@ -30,5 +30,32 @@ describe('toDTOs', () => {
       customerMemo: 'cm', totalAmount: '29000', breakdown: 'b',
       supExperience: 'あり', companions: '同行者X', howFound: 'Instagram',
     });
+  });
+});
+
+describe('fetchReminded / publishReminded', () => {
+  it('fetchReminded はID集合を返す', async () => {
+    const mock = vi.fn(async () => new Response(JSON.stringify({ ids: ['1', '2'] }), { status: 200 }));
+    vi.stubGlobal('fetch', mock);
+    const set = await fetchReminded('https://web.example', 'sec');
+    expect([...set].sort()).toEqual(['1', '2']);
+    expect(mock).toHaveBeenCalledWith('https://web.example/api/reminded',
+      expect.objectContaining({ headers: { authorization: 'Bearer sec' } }));
+    vi.unstubAllGlobals();
+  });
+  it('fetchReminded は非200で例外（送信中止のため）', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('ng', { status: 500 })));
+    await expect(fetchReminded('https://web.example', 'sec')).rejects.toThrow();
+    vi.unstubAllGlobals();
+  });
+  it('publishReminded はids+summaryをPOSTする', async () => {
+    const mock = vi.fn(async (_url: string, _init?: RequestInit) => new Response('{"ok":true}', { status: 200 }));
+    vi.stubGlobal('fetch', mock);
+    const summary = { at: '2026-07-02T10:00:00Z', sent: 1, skipped: 0, failed: 0, dryRun: false, test: false };
+    await publishReminded('https://web.example', 'sec', { ids: ['1'], summary });
+    const [url, init] = mock.mock.calls[0];
+    expect(url).toBe('https://web.example/ingest-reminded');
+    expect(JSON.parse(init!.body as string)).toEqual({ ids: ['1'], summary });
+    vi.unstubAllGlobals();
   });
 });

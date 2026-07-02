@@ -83,3 +83,29 @@ export async function publishForms(url: string, secret: string, map: Record<stri
   });
   if (!resp.ok) throw new Error(`forms ingest failed: HTTP ${resp.status}`);
 }
+
+export interface ReminderSummary {
+  at: string; sent: number; skipped: number; failed: number; dryRun: boolean; test: boolean;
+}
+
+// 送信済み予約IDを web(KV) から取得。失敗は例外＝呼び出し側で送信中止（二重送信防止を優先）
+export async function fetchReminded(url: string, secret: string): Promise<Set<string>> {
+  const resp = await fetch(`${url.replace(/\/$/, '')}/api/reminded`, {
+    headers: { authorization: `Bearer ${secret}` },
+  });
+  if (!resp.ok) throw new Error(`reminded fetch failed: HTTP ${resp.status}`);
+  const body = (await resp.json()) as { ids?: string[] };
+  return new Set(body.ids ?? []);
+}
+
+export async function publishReminded(
+  url: string, secret: string,
+  payload: { ids: string[]; summary: ReminderSummary },
+): Promise<void> {
+  const resp = await fetch(`${url.replace(/\/$/, '')}/ingest-reminded`, {
+    method: 'POST',
+    headers: { 'authorization': `Bearer ${secret}`, 'content-type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!resp.ok) throw new Error(`reminded ingest failed: HTTP ${resp.status}`);
+}
