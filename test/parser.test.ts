@@ -35,6 +35,16 @@ describe('parseReservations', () => {
     const broken = '﻿予約ID,コース名,参加日,ステータス,合計,予約者名\n,X,2026/07/10（金） 16:00,予約確定,2,A\n9,Y,未定,予約確定,2,B\n';
     expect(parseReservations(broken).length).toBe(0);
   });
+  it('メールアドレス列を email として読む', () => {
+    const csv = [
+      '予約グループID,予約ID,予約者名,予約者名カナ,電話番号,メールアドレス,コース名,申込日時,参加日,ステータス,合計',
+      '1,100,山田太郎,ヤマダタロウ,09011112222,taro@example.com,SUP体験,2026/06/01 10:00,2026/07/10（金） 10:00,予約確定,2',
+      '1,101,山田次郎,ヤマダジロウ,09033334444,,SUP体験,2026/06/01 10:00,2026/07/10（金） 10:00,予約確定,2',
+    ].join('\n');
+    const rs = parseReservations(csv);
+    expect(rs[0].email).toBe('taro@example.com');
+    expect(rs[1].email).toBeUndefined();
+  });
 });
 
 describe('toCalendarEvent', () => {

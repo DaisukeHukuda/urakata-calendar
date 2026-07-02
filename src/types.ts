@@ -7,6 +7,7 @@ export interface Reservation {
   customerKana?: string;
   status: string;
   phone?: string;
+  email?: string;
   breakdown?: string;
   memo?: string;
   media?: string;

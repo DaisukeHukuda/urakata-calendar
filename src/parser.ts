@@ -37,6 +37,7 @@ export function parseReservations(csvText: string): Reservation[] {
       customerKana: (rec['予約者名カナ'] ?? '').trim() || undefined,
       status: (rec['ステータス'] ?? '').trim(),
       phone: (rec['電話番号'] ?? '').trim() || undefined,
+      email: (rec['メールアドレス'] ?? '').trim() || undefined,
       breakdown: (rec['内訳'] ?? '').trim() || undefined,
       memo: (rec['予約メモ'] ?? '').trim() || undefined,
       media: (rec['媒体'] ?? '').trim() || undefined,
