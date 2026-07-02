@@ -52,6 +52,30 @@ export function selectReminderTargets(
   return { targets, noEmail };
 }
 
+export type TargetReason = 'not_found' | 'bad_status' | 'hotel' | 'filled' | 'no_email';
+
+// 個別送信モードの判定。時間窓・送信済みフラグは見ない（手動指定＝意図的な送信/再送）。
+export function selectTargetById(
+  reservations: Reservation[],
+  forms: Record<string, FormStatus>,
+  id: string,
+): { target?: ReminderTarget; reason?: TargetReason } {
+  const r = reservations.find((x) => x.reservationId === id);
+  if (!r) return { reason: 'not_found' };
+  if (!REMINDER_STATUSES.has(r.status)) return { reason: 'bad_status' };
+  if (r.courseName.includes('L')) return { reason: 'hotel' };
+  const f = forms[r.reservationId] ?? { consent: false, emergency: false };
+  if (f.consent && f.emergency) return { reason: 'filled' };
+  if (!r.email) return { reason: 'no_email' };
+  return {
+    target: {
+      reservationId: r.reservationId, email: r.email, customerName: r.customerName,
+      courseName: r.courseName, start: r.start,
+      missingConsent: !f.consent, missingEmergency: !f.emergency,
+    },
+  };
+}
+
 // 例: "7月3日(金) 10:00"（month:'long' で「7月」表記になる）
 const JST_FMT = new Intl.DateTimeFormat('ja-JP', {
   timeZone: 'Asia/Tokyo', month: 'long', day: 'numeric',

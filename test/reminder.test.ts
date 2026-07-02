@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { endOfTomorrowJst, selectReminderTargets, buildReminderEmail } from '../src/reminder.js';
+import { endOfTomorrowJst, selectReminderTargets, buildReminderEmail, selectTargetById } from '../src/reminder.js';
 import type { Reservation } from '../src/types.js';
 
 const NOW = new Date('2026-07-02T09:00:00+09:00');
@@ -67,6 +67,32 @@ describe('selectReminderTargets', () => {
     const res = selectReminderTargets([r], noForms, NOW);
     expect(res.targets).toHaveLength(0);
     expect(res.noEmail).toBe(1);
+  });
+});
+
+describe('selectTargetById', () => {
+  const forms = { r1: { consent: true, emergency: false } };
+  it('未記入の予約を対象として返す（時間窓は適用しない＝何日先でも可）', () => {
+    const r = rsv({ start: new Date('2026-08-15T10:00:00+09:00') });
+    const res = selectTargetById([r], forms, 'r1');
+    expect(res.target).toMatchObject({ reservationId: 'r1', missingConsent: false, missingEmergency: true });
+    expect(res.reason).toBeUndefined();
+  });
+  it('存在しないIDは not_found', () => {
+    expect(selectTargetById([rsv({})], forms, 'zzz').reason).toBe('not_found');
+  });
+  it('参加済など対象外ステータスは bad_status', () => {
+    expect(selectTargetById([rsv({ status: '参加済' })], forms, 'r1').reason).toBe('bad_status');
+  });
+  it('Lコースは hotel', () => {
+    expect(selectTargetById([rsv({ courseName: 'L メガSUP' })], forms, 'r1').reason).toBe('hotel');
+  });
+  it('両方記入済みは filled', () => {
+    const f = { r1: { consent: true, emergency: true } };
+    expect(selectTargetById([rsv({})], f, 'r1').reason).toBe('filled');
+  });
+  it('メール無しは no_email', () => {
+    expect(selectTargetById([rsv({ email: undefined })], forms, 'r1').reason).toBe('no_email');
   });
 });
 
