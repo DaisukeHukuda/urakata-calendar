@@ -140,3 +140,21 @@ Sup! Sup!
 1. **Phase 1（ローカルで試せる）**: parser email ＋ reminder.ts ＋ mailer ＋ remind.ts。`REMINDER_DRY_RUN=1` でローカル実行し対象一覧を確認できる。web未改修でも DRY_RUN は動く（フラグ取得スキップ）
 2. **Phase 2**: web のフラグ保存/照会エンドポイント ＋ reminder.yml（ユーザー作成）＋ Secrets 登録 → テストメール送信
 3. **Phase 3**: web の 📧 ボタン ＋ /remind ＋ 結果表示 → テスト期間を経て本番切替
+
+---
+
+## v2 変更（2026-07-02 同日・ユーザー要望）: 一括送信 → 個別送信
+
+**要望**: 未記入者全員への一括送信ではなく、**日別詳細の各予約行にボタンを置き、個別の予約に対して任意で送信**したい。
+
+**決定事項（ユーザー確認済み）**:
+- ヘッダーの一括📧ボタンは**削除**（一括ロジック自体は sync に残し、GitHub Actions 画面から入力欄を空にして実行すれば従来どおり動く）
+- 個別ボタンは**未記入（同意書 or 緊急連絡が未）の行のみ表示**。L(ホテル)・過去開始の予約には出さない
+- **再送可**。送信済みは「📧済」表示になり、確認ダイアログ（再送の旨を明記）を経て再送できる
+- 参加日が何日先でも送信可能（一括モードの「今日＋明日」時間窓は個別モードでは適用しない）
+
+**仕組み**:
+- `reminder.yml` の `workflow_dispatch` に入力 `reservation_id`（任意）を追加。web は `POST /remind` のボディ `{reservationId}` を受けて `inputs.reservation_id` 付きで dispatch
+- sync `remind.ts`: 環境変数 `REMINDER_TARGET_ID`（= inputs.reservation_id）が**あれば個別モード**（CSVを今日〜+90日で取得 → 該当IDを検証: 存在/ステータス/L除外/未記入/メール有 → 送信。**送信済みフラグは無視**=再送可、送信後は従来どおり記録）。**なければ従来の一括モード**
+- 個別モードの判定は `reminder.ts` の純粋関数 `selectTargetById(reservations, forms, id)` （対象 or 理由 `not_found`/`bad_status`/`hotel`/`filled`/`no_email` を返す）
+- web: 送信済み表示のため `renderDayDetailHTML` に reminded ID一覧を渡す（KV `reminded:*` は既に web にある）。ボタン押下 → confirm → `POST /remind` → 「受け付けました（数分後に送信）」。実送信の完了反映は次回リロード時に 📧済 で確認
