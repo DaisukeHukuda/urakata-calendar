@@ -68,6 +68,11 @@ describe('toCalendarEvent', () => {
     expect(e.summary.startsWith('【仮】')).toBe(true);
     expect(e.colorId).toBe(DEFAULT_SYNC_CONFIG.provisionalColorId);
   });
+  it('リクエスト予約は【リクエスト】プレフィックスと仮の色（承認待ちを区別表示）', () => {
+    const e = toCalendarEvent({ ...base, status: 'リクエスト' }, DEFAULT_SYNC_CONFIG);
+    expect(e.summary.startsWith('【リクエスト】')).toBe(true);
+    expect(e.colorId).toBe(DEFAULT_SYNC_CONFIG.provisionalColorId);
+  });
   it('courseDurations があればコース別所要分を使う', () => {
     const cfg = { ...DEFAULT_SYNC_CONFIG, courseDurations: { 'L メガSUP ナイト': 90 } };
     const e = toCalendarEvent(base, cfg);
@@ -81,5 +86,14 @@ describe('csvToEvents', () => {
     const events = csvToEvents(csv, DEFAULT_SYNC_CONFIG);
     const ids = events.map(e => e.id).sort();
     expect(ids).toEqual(['urkt3914186', 'urkt3914187']);
+  });
+  it('リクエスト予約もイベント化する（承認待ちもカレンダーに表示）', () => {
+    const csvWithRequest = [
+      '予約グループID,予約ID,予約者名,予約者名カナ,電話番号,メールアドレス,コース名,申込日時,参加日,ステータス,合計',
+      '1,200,鈴木一郎,スズキイチロウ,09044445555,d@example.com,SUP体験,2026/06/01 10:00,2026/07/12（日） 10:00,リクエスト,2',
+    ].join('\n');
+    const events = csvToEvents(csvWithRequest, DEFAULT_SYNC_CONFIG);
+    expect(events.map(e => e.id)).toEqual(['urkt200']);
+    expect(events[0].summary.startsWith('【リクエスト】')).toBe(true);
   });
 });

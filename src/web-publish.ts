@@ -2,7 +2,8 @@ import type { Reservation } from './types.js';
 import type { FormStatus } from './forms.js';
 
 // Webカレンダーへ公開するステータス。参加済も含める（実施後も当日の予約を表示し続けるため）。
-export const WEB_PUBLISH_STATUSES = new Set(['予約確定', '仮予約', '参加済']);
+// 承認待ちのリクエスト予約もカレンダーに表示する（承認/お断りで自動的に置き換わる）。
+export const WEB_PUBLISH_STATUSES = new Set(['予約確定', '仮予約', '参加済', 'リクエスト']);
 
 export function selectForWeb(reservations: Reservation[]): Reservation[] {
   return reservations.filter(r => WEB_PUBLISH_STATUSES.has(r.status));

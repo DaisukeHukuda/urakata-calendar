@@ -50,6 +50,10 @@ describe('selectReminderTargets', () => {
     const r = rsv({ status: '参加済' });
     expect(selectReminderTargets([r], noForms, NOW).targets).toHaveLength(0);
   });
+  it('リクエスト（未承認）は対象外', () => {
+    const r = rsv({ status: 'リクエスト' });
+    expect(selectReminderTargets([r], noForms, NOW).targets).toHaveLength(0);
+  });
   it('Lコースは対象外（webのisLと同じ基準: courseNameにLを含む）', () => {
     const r = rsv({ courseName: 'L メガSUP ナイト' });
     expect(selectReminderTargets([r], noForms, NOW).targets).toHaveLength(0);
@@ -83,6 +87,9 @@ describe('selectTargetById', () => {
   });
   it('参加済など対象外ステータスは bad_status', () => {
     expect(selectTargetById([rsv({ status: '参加済' })], forms, 'r1').reason).toBe('bad_status');
+  });
+  it('リクエスト（未承認）は bad_status', () => {
+    expect(selectTargetById([rsv({ status: 'リクエスト' })], forms, 'r1').reason).toBe('bad_status');
   });
   it('Lコースは hotel', () => {
     expect(selectTargetById([rsv({ courseName: 'L メガSUP' })], forms, 'r1').reason).toBe('hotel');

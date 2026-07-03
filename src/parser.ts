@@ -57,9 +57,10 @@ function normalizeId(prefix: string, reservationId: string): string {
 
 export function toCalendarEvent(r: Reservation, cfg: SyncConfig): CalendarEvent {
   const isProvisional = r.status === '仮予約';
+  const isRequest = r.status === 'リクエスト';
   const durationMin = cfg.courseDurations[r.courseName] ?? cfg.defaultDurationMinutes;
   const end = new Date(r.start.getTime() + durationMin * 60000);
-  const prefix = isProvisional ? '【仮】' : '';
+  const prefix = isRequest ? '【リクエスト】' : isProvisional ? '【仮】' : '';
   const summary = `${prefix}${r.courseName}・${r.customerName}（${r.pax}名）`;
   const description = [
     `予約ID: ${r.reservationId}`,
@@ -76,11 +77,12 @@ export function toCalendarEvent(r: Reservation, cfg: SyncConfig): CalendarEvent 
     description,
     start: r.start,
     end,
-    colorId: isProvisional ? cfg.provisionalColorId : cfg.confirmedColorId,
+    colorId: (isProvisional || isRequest) ? cfg.provisionalColorId : cfg.confirmedColorId,
   };
 }
 
-const SYNCED_STATUSES = new Set(['予約確定', '仮予約']);
+// リクエスト（承認待ち）も含めてカレンダーに表示する。承認/お断りでステータスが変わり自動的に置き換わる。
+const SYNCED_STATUSES = new Set(['予約確定', '仮予約', 'リクエスト']);
 
 export function csvToEvents(csvText: string, cfg: SyncConfig): CalendarEvent[] {
   return parseReservations(csvText)

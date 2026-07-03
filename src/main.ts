@@ -17,9 +17,10 @@ async function run(): Promise<void> {
   const to = new Date(now.getTime() + cfg.syncDaysAhead * 24 * 60 * 60000);
 
   console.log(`[sync] fetch ${from.toISOString()} .. ${to.toISOString()}`);
+  // リクエスト（承認待ち）も取得してカレンダーに表示。承認/お断りで自動的に置き換わる。
   const csv = await fetchReservationsCsv({
     baseUrl: cfg.baseUrl, loginId: cfg.loginId, password: cfg.password,
-    from, to, statuses: ['fixed', 'temporary_fixed', 'joined'],
+    from, to, statuses: ['fixed', 'temporary_fixed', 'joined', 'requested'],
   });
 
   const events = csvToEvents(csv, DEFAULT_SYNC_CONFIG);

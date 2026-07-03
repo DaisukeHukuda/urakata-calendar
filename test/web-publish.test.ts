@@ -14,8 +14,16 @@ describe('selectForWeb', () => {
     const list = [mk('a', '予約確定'), mk('b', '仮予約'), mk('c', '参加済')];
     expect(selectForWeb(list).map(r => r.reservationId)).toEqual(['a', 'b', 'c']);
   });
+  it('リクエスト（承認待ち）も残す', () => {
+    const list = [mk('a', '予約確定'), mk('b', 'リクエスト')];
+    expect(selectForWeb(list).map(r => r.reservationId)).toEqual(['a', 'b']);
+  });
   it('それ以外のステータス（キャンセル等）は除外する', () => {
     const list = [mk('a', '予約確定'), mk('x', 'キャンセル'), mk('y', 'キャンセル待ち')];
+    expect(selectForWeb(list).map(r => r.reservationId)).toEqual(['a']);
+  });
+  it('リクエストお断り・予約キャンセルは除外する', () => {
+    const list = [mk('a', '予約確定'), mk('x', 'リクエストお断り'), mk('y', '予約キャンセル')];
     expect(selectForWeb(list).map(r => r.reservationId)).toEqual(['a']);
   });
 });
