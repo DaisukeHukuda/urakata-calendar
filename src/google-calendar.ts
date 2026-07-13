@@ -67,6 +67,26 @@ export class GoogleCalendarClient implements CalendarClient {
     return ids;
   }
 
+  // 任意カレンダーの予定を取得（このクライアントの認証を流用。calendarId はコンストラクタのものと別でよい）
+  async listEvents(calendarId: string, timeMinISO: string, timeMaxISO: string): Promise<calendar_v3.Schema$Event[]> {
+    const items: calendar_v3.Schema$Event[] = [];
+    let pageToken: string | undefined;
+    do {
+      const res = await withRetry(() => this.cal.events.list({
+        calendarId,
+        timeMin: timeMinISO,
+        timeMax: timeMaxISO,
+        singleEvents: true,
+        orderBy: 'startTime',
+        maxResults: 2500,
+        pageToken,
+      }));
+      items.push(...(res.data.items ?? []));
+      pageToken = res.data.nextPageToken ?? undefined;
+    } while (pageToken);
+    return items;
+  }
+
   async upsertEvent(event: CalendarEvent): Promise<void> {
     const body: calendar_v3.Schema$Event = {
       id: event.id,

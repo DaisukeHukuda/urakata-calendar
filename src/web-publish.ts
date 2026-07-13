@@ -1,5 +1,6 @@
 import type { Reservation } from './types.js';
 import type { FormStatus } from './forms.js';
+import type { ShiftEntry } from './shifts.js';
 
 // Webカレンダーへ公開するステータス。参加済も含める（実施後も当日の予約を表示し続けるため）。
 // 承認待ちのリクエスト予約もカレンダーに表示する（承認/お断りで自動的に置き換わる）。
@@ -83,6 +84,15 @@ export async function publishForms(url: string, secret: string, map: Record<stri
     body: JSON.stringify(map),
   });
   if (!resp.ok) throw new Error(`forms ingest failed: HTTP ${resp.status}`);
+}
+
+export async function publishShifts(url: string, secret: string, map: Record<string, ShiftEntry[]>): Promise<void> {
+  const resp = await fetch(`${url.replace(/\/$/, '')}/ingest-shifts`, {
+    method: 'POST',
+    headers: { 'authorization': `Bearer ${secret}`, 'content-type': 'application/json' },
+    body: JSON.stringify(map),
+  });
+  if (!resp.ok) throw new Error(`shifts ingest failed: HTTP ${resp.status}`);
 }
 
 export interface ReminderSummary {

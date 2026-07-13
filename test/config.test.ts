@@ -14,4 +14,12 @@ describe('loadConfig', () => {
   it('必須が欠けると例外', () => {
     expect(() => loadConfig({ ...base, URAKATA_LOGIN_ID: '' })).toThrow();
   });
+  it('shiftCalendarIdは未設定でも例外にならず既定値になる', () => {
+    const c = loadConfig(base);
+    expect(c.shiftCalendarId).toBe('2p5l9qaudhcjesc29pmrkhgs2o@group.calendar.google.com');
+  });
+  it('shiftCalendarIdはGOOGLE_SHIFT_CALENDAR_IDで上書きできる', () => {
+    const c = loadConfig({ ...base, GOOGLE_SHIFT_CALENDAR_ID: 'override@group.calendar.google.com' });
+    expect(c.shiftCalendarId).toBe('override@group.calendar.google.com');
+  });
 });

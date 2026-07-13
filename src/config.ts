@@ -5,6 +5,7 @@ export interface AppConfig {
   serviceAccountJson: string;
   calendarId: string;
   syncDaysAhead: number;
+  shiftCalendarId: string;
 }
 
 export function loadConfig(env: Record<string, string | undefined>): AppConfig {
@@ -20,5 +21,7 @@ export function loadConfig(env: Record<string, string | undefined>): AppConfig {
     serviceAccountJson: req('GOOGLE_SERVICE_ACCOUNT_JSON'),
     calendarId: req('GOOGLE_CALENDAR_ID'),
     syncDaysAhead: Number.parseInt((env['SYNC_DAYS_AHEAD'] ?? '90').trim(), 10) || 90,
+    // シフト決定用カレンダー: 必須ではない（未共有の間は取得側でwarnして継続）。envで上書き可。
+    shiftCalendarId: (env['GOOGLE_SHIFT_CALENDAR_ID'] ?? '').trim() || '2p5l9qaudhcjesc29pmrkhgs2o@group.calendar.google.com',
   };
 }

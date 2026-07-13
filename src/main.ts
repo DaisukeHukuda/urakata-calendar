@@ -4,9 +4,10 @@ import { csvToEvents, parseReservations } from './parser.js';
 import { syncEvents } from './syncer.js';
 import { GoogleCalendarClient } from './google-calendar.js';
 import { DEFAULT_SYNC_CONFIG } from './types.js';
-import { publishToWeb, repeatVisitDates, publishRepeats, selectForWeb, publishForms } from './web-publish.js';
+import { publishToWeb, repeatVisitDates, publishRepeats, selectForWeb, publishForms, publishShifts } from './web-publish.js';
 import { parseFormResponses, CONSENT_CFG, EMERGENCY_CFG, matchForms, readSheetValues } from './forms.js';
 import { shouldSyncHistory, parseHistoryHours } from './schedule.js';
+import { buildShiftMap } from './shifts.js';
 
 async function run(): Promise<void> {
   const cfg = loadConfig(process.env);
@@ -76,6 +77,18 @@ async function run(): Promise<void> {
       console.log(`[sync] forms published for ${Object.keys(formsMap).length} reservations`);
     } catch (e) {
       console.error('[sync] forms publish failed (calendar sync unaffected):', e);
+    }
+    try {
+      // シフト決定用カレンダー: 前月1日(JST)〜3か月後の月末(JST)まで。
+      // 未共有の間は403/404になるため、失敗してもsync全体は止めずwarnのみで続行する。
+      const shiftFrom = new Date(Date.UTC(y, m - 2, 1, -9, 0, 0)); // 前月1日 00:00 JST
+      const shiftTo = new Date(Date.UTC(y, m + 3, 1, -9, 0, 0)); // 3か月後の月末（=4か月後1日の直前）まで
+      const shiftItems = await client.listEvents(cfg.shiftCalendarId, shiftFrom.toISOString(), shiftTo.toISOString());
+      const shiftMap = buildShiftMap(shiftItems);
+      await publishShifts(webUrl, webSecret, shiftMap);
+      console.log(`[sync] shifts published for ${Object.keys(shiftMap).length} days`);
+    } catch (e) {
+      console.warn('[sync] shifts publish failed (calendar may not be shared yet; calendar sync unaffected):', e);
     }
   }
 }
