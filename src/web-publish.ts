@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import type { Reservation } from './types.js';
 import type { FormStatus } from './forms.js';
 import type { ShiftEntry } from './shifts.js';
@@ -119,4 +120,30 @@ export async function publishReminded(
     body: JSON.stringify(payload),
   });
   if (!resp.ok) throw new Error(`reminded ingest failed: HTTP ${resp.status}`);
+}
+
+export interface HistoryRecord {
+  date: string; course: string; pax: number; amount: number; status: string; phoneHash: string;
+}
+
+export function parseAmount(s: string | undefined): number {
+  const digits = (s ?? '').replace(/[^0-9]/g, '');
+  return digits ? Number(digits) : 0;
+}
+
+export function hashPhone(phone: string | undefined, salt: string): string {
+  const p = (phone ?? '').replace(/[^0-9]/g, '');
+  if (!p || /^0+$/.test(p)) return '';
+  return createHmac('sha256', salt).update(p).digest('hex').slice(0, 16);
+}
+
+export function buildHistoryRecords(reservations: Reservation[], salt: string): HistoryRecord[] {
+  return reservations.map(r => ({
+    date: jstDateOf(r.start),
+    course: r.courseName,
+    pax: r.pax,
+    amount: parseAmount(r.totalAmount),
+    status: r.status,
+    phoneHash: hashPhone(r.phone, salt),
+  }));
 }
