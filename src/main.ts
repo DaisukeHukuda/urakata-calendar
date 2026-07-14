@@ -4,7 +4,7 @@ import { csvToEvents, parseReservations } from './parser.js';
 import { syncEvents } from './syncer.js';
 import { GoogleCalendarClient } from './google-calendar.js';
 import { DEFAULT_SYNC_CONFIG } from './types.js';
-import { publishToWeb, repeatVisitDates, publishRepeats, selectForWeb, publishForms, publishShifts } from './web-publish.js';
+import { publishToWeb, repeatVisitDates, publishRepeats, selectForWeb, publishForms, publishShifts, publishHistory, buildHistoryRecords } from './web-publish.js';
 import { parseFormResponses, CONSENT_CFG, EMERGENCY_CFG, matchForms, readSheetValues } from './forms.js';
 import { shouldSyncHistory, parseHistoryHours } from './schedule.js';
 import { buildShiftMap } from './shifts.js';
@@ -59,6 +59,9 @@ async function run(): Promise<void> {
         const repeats = repeatVisitDates(history);
         await publishRepeats(webUrl, webSecret, repeats);
         console.log(`[sync] repeats published for ${Object.keys(repeats).length} phones`);
+        const historyRecords = buildHistoryRecords(history, process.env.HISTORY_SALT ?? 'supsup');
+        await publishHistory(webUrl, webSecret, historyRecords);
+        console.log(`[sync] history published ${historyRecords.length} records`);
       } catch (e) {
         console.error('[sync] repeats publish failed (calendar sync unaffected):', e);
       }

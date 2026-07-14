@@ -147,3 +147,12 @@ export function buildHistoryRecords(reservations: Reservation[], salt: string): 
     phoneHash: hashPhone(r.phone, salt),
   }));
 }
+
+export async function publishHistory(url: string, secret: string, records: HistoryRecord[]): Promise<void> {
+  const resp = await fetch(`${url.replace(/\/$/, '')}/ingest-history`, {
+    method: 'POST',
+    headers: { 'authorization': `Bearer ${secret}`, 'content-type': 'application/json' },
+    body: JSON.stringify(records),
+  });
+  if (!resp.ok) throw new Error(`history ingest failed: HTTP ${resp.status}`);
+}
