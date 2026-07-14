@@ -59,7 +59,11 @@ async function run(): Promise<void> {
         const repeats = repeatVisitDates(history);
         await publishRepeats(webUrl, webSecret, repeats);
         console.log(`[sync] repeats published for ${Object.keys(repeats).length} phones`);
-        const historyRecords = buildHistoryRecords(history, process.env.HISTORY_SALT ?? 'supsup');
+        // 電話ハッシュのソルトは秘密必須。未設定なら公開既定値でPIIを弱めないよう履歴公開を中止する
+        // （このthrowは同じtryのcatchで拾われ、repeats公開・カレンダー同期には影響しない）。
+        const historySalt = process.env.HISTORY_SALT;
+        if (!historySalt) throw new Error('HISTORY_SALT 未設定のため履歴公開を中止（公開既定ソルトでの電話ハッシュを避ける）');
+        const historyRecords = buildHistoryRecords(history, historySalt);
         await publishHistory(webUrl, webSecret, historyRecords);
         console.log(`[sync] history published ${historyRecords.length} records`);
       } catch (e) {
