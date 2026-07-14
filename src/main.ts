@@ -63,7 +63,7 @@ async function run(): Promise<void> {
         await publishHistory(webUrl, webSecret, historyRecords);
         console.log(`[sync] history published ${historyRecords.length} records`);
       } catch (e) {
-        console.error('[sync] repeats publish failed (calendar sync unaffected):', e);
+        console.error('[sync] repeats/history publish failed (calendar sync unaffected):', e);
       }
     } else {
       console.log('[sync] history sweep skipped (light run)');
