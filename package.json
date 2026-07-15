@@ -7,18 +7,15 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "sync": "tsx src/main.ts",
-    "remind": "tsx src/remind.ts"
+    "sync": "tsx src/main.ts"
   },
   "dependencies": {
     "csv-parse": "^5.5.6",
     "googleapis": "^144.0.0",
-    "nodemailer": "^9.0.3",
     "playwright": "^1.48.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "@types/nodemailer": "^8.0.1",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"
