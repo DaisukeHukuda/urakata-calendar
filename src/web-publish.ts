@@ -97,12 +97,28 @@ export async function publishShifts(url: string, secret: string, map: Record<str
 }
 
 export interface HistoryRecord {
-  date: string; course: string; pax: number; amount: number; status: string; phoneHash: string;
+  date: string; course: string; pax: number; amount: number; status: string; phoneHash: string; source: string;
 }
 
 export function parseAmount(s: string | undefined): number {
   const digits = (s ?? '').replace(/[^0-9]/g, '');
   return digits ? Number(digits) : 0;
+}
+
+// 「ご予約の経緯」(自由記述)＋「媒体」を既知カテゴリへ丸める。
+// 生の自由記述はPII混入の恐れがあるためKVへは出さず、このカテゴリのみを公開する。
+// 判定は先勝ち（SNS・リピートを検索より優先）。
+export function normalizeSource(howFound?: string, media?: string): string {
+  const t = `${howFound ?? ''} ${media ?? ''}`.toLowerCase();
+  if (!t.trim()) return '未回答';
+  const has = (...words: string[]) => words.some((w) => t.includes(w));
+  if (has('インスタ', 'instagram', 'insta')) return 'Instagram';
+  if (has('facebook', 'フェイスブック', 'fb')) return 'Facebook';
+  if (has('リピート', '以前', '前回', '毎年', '常連', '再訪', '2回目', '二回目')) return 'リピート';
+  if (has('紹介', '知人', '友人', '友達', '家族', 'すすめ', '勧め')) return '紹介';
+  if (has('検索', 'google', 'グーグル', 'yahoo', 'ヤフー', 'ネット', 'ウェブ', 'web', 'ホームページ', 'サイト')) return '検索・Web';
+  if (has('アソビュー', 'asoview', 'あそびゅー')) return 'アソビュー';
+  return 'その他';
 }
 
 export function hashPhone(phone: string | undefined, salt: string): string {
@@ -119,6 +135,7 @@ export function buildHistoryRecords(reservations: Reservation[], salt: string): 
     amount: parseAmount(r.totalAmount),
     status: r.status,
     phoneHash: hashPhone(r.phone, salt),
+    source: normalizeSource(r.howFound, r.media),
   }));
 }
 

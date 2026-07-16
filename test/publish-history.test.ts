@@ -11,7 +11,7 @@ describe('publishHistory', () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
     vi.stubGlobal('fetch', fetchMock);
     await publishHistory('https://web.example/', 'sek', [
-      { date: '2023-06-10', course: 'SUP', pax: 2, amount: 12000, status: '参加済', phoneHash: 'abc' },
+      { date: '2023-06-10', course: 'SUP', pax: 2, amount: 12000, status: '参加済', phoneHash: 'abc', source: '未回答' },
     ]);
     const [u, init] = fetchMock.mock.calls[0];
     expect(u).toBe('https://web.example/ingest-history');
