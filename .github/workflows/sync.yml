@@ -36,3 +36,5 @@ jobs:
           SYNC_DAYS_AHEAD: '90'
           WEB_INGEST_URL: ${{ secrets.WEB_INGEST_URL }}
           WEB_INGEST_SECRET: ${{ secrets.WEB_INGEST_SECRET }}
+          HISTORY_SALT: ${{ secrets.HISTORY_SALT }}
+          HISTORY_SYNC_HOURS: ${{ vars.HISTORY_SYNC_HOURS }}
