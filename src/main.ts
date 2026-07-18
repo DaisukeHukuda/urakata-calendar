@@ -4,10 +4,11 @@ import { csvToEvents, parseReservations } from './parser.js';
 import { syncEvents } from './syncer.js';
 import { GoogleCalendarClient } from './google-calendar.js';
 import { DEFAULT_SYNC_CONFIG } from './types.js';
-import { publishToWeb, repeatVisitDates, publishRepeats, selectForWeb, publishForms, publishShifts, publishHistory, buildHistoryRecords } from './web-publish.js';
+import { publishToWeb, repeatVisitDates, publishRepeats, selectForWeb, publishForms, publishShifts, publishHistory, buildHistoryRecords, publishLRepeats, jstDateOf } from './web-publish.js';
 import { parseFormResponses, CONSENT_CFG, EMERGENCY_CFG, matchForms, readSheetValues } from './forms.js';
 import { shouldSyncHistory, parseHistoryHours } from './schedule.js';
 import { buildShiftMap } from './shifts.js';
+import { buildLRepeatMap } from './lrepeats.js';
 
 async function run(): Promise<void> {
   const cfg = loadConfig(process.env);
@@ -59,6 +60,24 @@ async function run(): Promise<void> {
         const repeats = repeatVisitDates(history);
         await publishRepeats(webUrl, webSecret, repeats);
         console.log(`[sync] repeats published for ${Object.keys(repeats).length} phones`);
+        // ホテル(L)予約の「リピーターの可能性」(同名一致)。名前がまだ残っている`history`から組み立てる
+        // （/ingest-history向けの電話ハッシュ化・名前ドロップより前）。失敗してもrepeats/history公開や
+        // カレンダー同期は止めない(warnのみ・内側try/catchで隔離)。
+        try {
+          const historyEntries = history.map((r) => ({ name: r.customerName, date: jstDateOf(r.start) }));
+          const currentL = selectForWeb(parseReservations(csv))
+            .filter((r) => r.courseName.includes('L'))
+            .map((r) => ({
+              reservationId: r.reservationId,
+              name: r.customerName || r.customerKana || '',
+              date: jstDateOf(r.start),
+            }));
+          const lrepeats = buildLRepeatMap(historyEntries, currentL);
+          await publishLRepeats(webUrl, webSecret, lrepeats);
+          console.log(`[sync] lrepeats published for ${Object.keys(lrepeats).length} reservations`);
+        } catch (e) {
+          console.warn('[sync] lrepeats publish failed (repeats/history/calendar sync unaffected):', e);
+        }
         // 電話ハッシュのソルトは秘密必須。未設定なら公開既定値でPIIを弱めないよう履歴公開を中止する
         // （このthrowは同じtryのcatchで拾われ、repeats公開・カレンダー同期には影響しない）。
         const historySalt = process.env.HISTORY_SALT;

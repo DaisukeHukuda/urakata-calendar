@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto';
 import type { Reservation } from './types.js';
 import type { FormStatus } from './forms.js';
 import type { ShiftEntry } from './shifts.js';
+import type { LRepeatEntry } from './lrepeats.js';
 
 // Webカレンダーへ公開するステータス。参加済も含める（実施後も当日の予約を表示し続けるため）。
 // 承認待ちのリクエスト予約もカレンダーに表示する（承認/お断りで自動的に置き換わる）。
@@ -50,7 +51,8 @@ function normPhone(s?: string): string {
   return (s ?? '').replace(/[^0-9]/g, '');
 }
 
-function jstDateOf(d: Date): string {
+// main.ts側でもL予約リピーター判定のJST日付組み立てに再利用するためexportする
+export function jstDateOf(d: Date): string {
   const j = new Date(d.getTime() + 9 * 60 * 60 * 1000);
   return `${j.getUTCFullYear()}-${String(j.getUTCMonth() + 1).padStart(2, '0')}-${String(j.getUTCDate()).padStart(2, '0')}`;
 }
@@ -76,6 +78,15 @@ export async function publishRepeats(url: string, secret: string, repeats: Recor
     body: JSON.stringify(repeats),
   });
   if (!resp.ok) throw new Error(`repeats ingest failed: HTTP ${resp.status}`);
+}
+
+export async function publishLRepeats(url: string, secret: string, map: Record<string, LRepeatEntry>): Promise<void> {
+  const resp = await fetch(`${url.replace(/\/$/, '')}/ingest-lrepeats`, {
+    method: 'POST',
+    headers: { 'authorization': `Bearer ${secret}`, 'content-type': 'application/json' },
+    body: JSON.stringify(map),
+  });
+  if (!resp.ok) throw new Error(`lrepeats ingest failed: HTTP ${resp.status}`);
 }
 
 export async function publishForms(url: string, secret: string, map: Record<string, FormStatus>): Promise<void> {
