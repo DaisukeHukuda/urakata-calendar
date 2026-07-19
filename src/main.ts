@@ -64,7 +64,8 @@ async function run(): Promise<void> {
         // （/ingest-history向けの電話ハッシュ化・名前ドロップより前）。失敗してもrepeats/history公開や
         // カレンダー同期は止めない(warnのみ・内側try/catchで隔離)。
         try {
-          const historyEntries = history.map((r) => ({ name: r.customerName, date: jstDateOf(r.start) }));
+          // 現在L側と同じフォールバック（ホテル経由の履歴は予約者名が空でカナ欄にだけ名前がある場合がある）
+          const historyEntries = history.map((r) => ({ name: r.customerName || r.customerKana || '', date: jstDateOf(r.start) }));
           const currentL = selectForWeb(parseReservations(csv))
             .filter((r) => r.courseName.includes('L'))
             .map((r) => ({
@@ -75,7 +76,9 @@ async function run(): Promise<void> {
           // 診断: 名前が取れている件数だけをログする（名前そのものは出さない）
           const namedHistory = historyEntries.filter((h) => nameKey(h.name) !== '').length;
           const namedCurrentL = currentL.filter((c) => nameKey(c.name) !== '').length;
-          console.log(`[sync] lrepeats inputs: history=${historyEntries.length} (named=${namedHistory}) currentL=${currentL.length} (named=${namedCurrentL})`);
+          const historyL = history.filter((r) => r.courseName.includes('L'));
+          const namedHistoryL = historyL.filter((r) => nameKey(r.customerName || r.customerKana || '') !== '').length;
+          console.log(`[sync] lrepeats inputs: history=${historyEntries.length} (named=${namedHistory}) historyL=${historyL.length} (named=${namedHistoryL}) currentL=${currentL.length} (named=${namedCurrentL})`);
           const lrepeats = buildLRepeatMap(historyEntries, currentL);
           await publishLRepeats(webUrl, webSecret, lrepeats);
           console.log(`[sync] lrepeats published for ${Object.keys(lrepeats).length} reservations`);
