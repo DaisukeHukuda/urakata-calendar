@@ -8,7 +8,7 @@ import { publishToWeb, repeatVisitDates, publishRepeats, selectForWeb, publishFo
 import { parseFormResponses, CONSENT_CFG, EMERGENCY_CFG, matchForms, readSheetValues } from './forms.js';
 import { shouldSyncHistory, parseHistoryHours } from './schedule.js';
 import { buildShiftMap } from './shifts.js';
-import { buildLRepeatMap } from './lrepeats.js';
+import { buildLRepeatMap, nameKey } from './lrepeats.js';
 
 async function run(): Promise<void> {
   const cfg = loadConfig(process.env);
@@ -72,6 +72,10 @@ async function run(): Promise<void> {
               name: r.customerName || r.customerKana || '',
               date: jstDateOf(r.start),
             }));
+          // 診断: 名前が取れている件数だけをログする（名前そのものは出さない）
+          const namedHistory = historyEntries.filter((h) => nameKey(h.name) !== '').length;
+          const namedCurrentL = currentL.filter((c) => nameKey(c.name) !== '').length;
+          console.log(`[sync] lrepeats inputs: history=${historyEntries.length} (named=${namedHistory}) currentL=${currentL.length} (named=${namedCurrentL})`);
           const lrepeats = buildLRepeatMap(historyEntries, currentL);
           await publishLRepeats(webUrl, webSecret, lrepeats);
           console.log(`[sync] lrepeats published for ${Object.keys(lrepeats).length} reservations`);
