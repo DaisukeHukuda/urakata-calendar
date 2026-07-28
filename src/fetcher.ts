@@ -8,6 +8,7 @@ export interface FetchOptions {
   from: Date; // 参加日 from
   to: Date; // 参加日 to
   statuses: string[]; // 例 ['fixed', 'temporary_fixed']
+  otpProvider?: OtpProvider; // OTP画面遭遇時にメールから認証コードを取得する（未設定なら明示エラー）
 }
 
 // 実機（2026-06-18）で確認したウラカタ検索のクエリパラメータ名
@@ -59,25 +60,106 @@ function buildCsvUrl(o: FetchOptions): string {
 // ログインに必要な認証情報（from/to なしの FetchOptions サブセット）
 type LoginCreds = Pick<FetchOptions, 'baseUrl' | 'loginId' | 'password'>;
 
-/**
- * ウラカタにログインする（ラベルベースの頑健なロケータ。ログアウト時はベースURLがログイン画面）。
- * ログイン失敗時は例外を投げる。成功時は同一 context の request が認証済みになる。
- */
-async function loginUrakata(page: Page, o: LoginCreds): Promise<void> {
-  await page.goto(o.baseUrl, { waitUntil: 'networkidle' });
-  await page.getByLabel('ログインID').fill(o.loginId);
-  await page.getByLabel('パスワード').fill(o.password);
-  await Promise.all([
-    page.waitForLoadState('networkidle'),
-    page.getByRole('button', { name: 'ログイン' }).click(),
-  ]);
+/** OTP画面で認証コードを取ってくる関数（実装は otp-mail.ts。main.ts で結線） */
+export type OtpProvider = (since: Date) => Promise<string>;
 
-  // ログイン成功検証: 成功するとパスワード欄が消える。残っていれば失敗。
-  if ((await page.getByLabel('パスワード').count()) > 0) {
+export type LoginStage = 'loggedIn' | 'loginForm' | 'otp' | 'registerEmail';
+
+/**
+ * 画面テキストとパスワード欄の有無からログインフローのどの段階かを判定する（純関数）。
+ * 判定順序が重要: OTP画面・メール登録画面にも「ログイン」等の語が含まれうるため、
+ * 特徴的な文言（認証コード→メールアドレス登録）を先に見る。
+ */
+export function detectLoginStage(pageText: string, hasPasswordField: boolean): LoginStage {
+  const t = pageText.replace(/\s+/g, '');
+  if (t.includes('認証コード')) return 'otp';
+  if (t.includes('メールアドレス') && t.includes('登録')) return 'registerEmail';
+  if (hasPasswordField) return 'loginForm';
+  return 'loggedIn';
+}
+
+/** 現在のページの段階を判定する（DOM問い合わせ込み） */
+async function currentStage(page: Page): Promise<LoginStage> {
+  const text = await page.locator('body').innerText();
+  const hasPasswordField = (await page.locator('input[type="password"]').count()) > 0;
+  return detectLoginStage(text, hasPasswordField);
+}
+
+interface LoginDeps {
+  otpProvider?: OtpProvider;
+}
+
+/**
+ * ウラカタにログインする（2段階認証対応）。
+ * - storageState 復元などで既ログインなら何もしない
+ * - ID/PW送信後にOTP画面が出たら、「このデバイスを信頼する」をチェックし、
+ *   otpProvider でメールから認証コードを取得して入力する（30日間はOTP免除になる）
+ * - メールアドレス未登録画面なら、手動登録を促す日本語メッセージで fail-loud
+ */
+async function loginUrakata(page: Page, o: LoginCreds, deps: LoginDeps = {}): Promise<void> {
+  await page.goto(o.baseUrl, { waitUntil: 'networkidle' });
+  let stage = await currentStage(page);
+  if (stage === 'loggedIn') return;
+
+  if (stage === 'loginForm') {
+    // OTPメールはログイン送信時に発射されるため、送信直前の時刻を since にする
+    const otpRequestedAt = new Date();
+    await page.getByLabel('ログインID').fill(o.loginId);
+    await page.getByLabel('パスワード').fill(o.password);
+    await Promise.all([
+      page.waitForLoadState('networkidle'),
+      page.getByRole('button', { name: 'ログイン' }).click(),
+    ]);
+    stage = await currentStage(page);
+    if (stage === 'otp') {
+      await completeOtp(page, otpRequestedAt, deps);
+      stage = await currentStage(page);
+    }
+  }
+
+  if (stage === 'registerEmail') {
     throw new Error(
-      'ウラカタのログインに失敗しました（ログインID/パスワードを確認してください）',
+      '2段階認証のメールアドレスが未登録です。ブラウザでウラカタに一度手動ログインし、認証用メールアドレス（supsupnikko@gmail.com）を登録してください。',
     );
   }
+  if (stage !== 'loggedIn') {
+    throw new Error('ウラカタのログインに失敗しました（ログインID/パスワード/認証コードを確認してください）');
+  }
+}
+
+/** OTP画面: 信頼チェック → メールからコード取得 → 入力 → 送信 */
+async function completeOtp(page: Page, since: Date, deps: LoginDeps): Promise<void> {
+  if (!deps.otpProvider) {
+    throw new Error(
+      '認証コードの入力が必要ですが、OTPメール自動読取が未設定です（OTP_IMAP_USER / OTP_IMAP_PASSWORD を設定してください）',
+    );
+  }
+
+  // 「このデバイスを信頼する」にチェック（30日間OTP免除）。ラベルで見つからなければ
+  // 画面上に唯一のチェックボックスがある場合のみそれを使う。見つからなくても続行。
+  const trustByLabel = page.getByLabel(/このデバイスを信頼/);
+  if ((await trustByLabel.count()) > 0) {
+    await trustByLabel.first().check().catch(() => {/* チェック不可でも続行 */});
+  } else {
+    const checkboxes = page.locator('input[type="checkbox"]');
+    if ((await checkboxes.count()) === 1) {
+      await checkboxes.first().check().catch(() => {/* チェック不可でも続行 */});
+    }
+  }
+
+  const code = await deps.otpProvider(since);
+
+  // コード入力欄: ラベル→種別の順で探す
+  const byLabel = page.getByLabel(/認証コード/);
+  const codeInput = (await byLabel.count()) > 0
+    ? byLabel.first()
+    : page.locator('input[type="text"], input[type="tel"], input[type="number"]').first();
+  await codeInput.fill(code);
+
+  await Promise.all([
+    page.waitForLoadState('networkidle'),
+    page.getByRole('button', { name: /認証|確認|送信|ログイン/ }).first().click(),
+  ]);
 }
 
 // 取得したCSV本文が想定どおりか検証する（ヘッダ「予約ID」の存在）。
@@ -102,7 +184,7 @@ export async function fetchReservationsCsv(o: FetchOptions): Promise<string> {
     const context = await browser.newContext();
     const page = await context.newPage();
 
-    await loginUrakata(page, o);
+    await loginUrakata(page, o, { otpProvider: o.otpProvider });
 
     // --- 認証済みクッキーを共有する request コンテキストでCSVを取得 ---
     const csvUrl = buildCsvUrl(o);
@@ -137,7 +219,7 @@ export async function fetchReservationsCsvRanges(
     const context = await browser.newContext();
     const page = await context.newPage();
 
-    await loginUrakata(page, base);
+    await loginUrakata(page, base, { otpProvider: base.otpProvider });
 
     const bodies: string[] = [];
     for (const range of ranges) {
