@@ -23,3 +23,32 @@ describe('loadConfig', () => {
     expect(c.shiftCalendarId).toBe('override@group.calendar.google.com');
   });
 });
+
+describe('MFA関連の設定', () => {
+  const base = {
+    URAKATA_URL: 'https://example.com/',
+    URAKATA_LOGIN_ID: 'id',
+    URAKATA_PASSWORD: 'pw',
+    GOOGLE_SERVICE_ACCOUNT_JSON: '{}',
+    GOOGLE_CALENDAR_ID: 'cal',
+  };
+
+  it('未設定なら otpImapUser/otpImapPassword は undefined、storageStatePath は既定値', () => {
+    const cfg = loadConfig(base);
+    expect(cfg.otpImapUser).toBeUndefined();
+    expect(cfg.otpImapPassword).toBeUndefined();
+    expect(cfg.storageStatePath).toBe('.auth/storage-state.json');
+  });
+
+  it('設定すれば読み込まれる（前後空白は除去）', () => {
+    const cfg = loadConfig({
+      ...base,
+      OTP_IMAP_USER: ' supsupnikko@gmail.com ',
+      OTP_IMAP_PASSWORD: ' apppass ',
+      STORAGE_STATE_PATH: ' /tmp/state.json ',
+    });
+    expect(cfg.otpImapUser).toBe('supsupnikko@gmail.com');
+    expect(cfg.otpImapPassword).toBe('apppass');
+    expect(cfg.storageStatePath).toBe('/tmp/state.json');
+  });
+});

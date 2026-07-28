@@ -1,5 +1,7 @@
 import { loadConfig } from './config.js';
 import { fetchReservationsCsv, fetchReservationsCsvRanges, yearlyRanges } from './fetcher.js';
+import { waitForOtpCode, createImapOtpFetcher } from './otp-mail.js';
+import type { OtpProvider } from './fetcher.js';
 import { csvToEvents, parseReservations } from './parser.js';
 import { syncEvents } from './syncer.js';
 import { GoogleCalendarClient } from './google-calendar.js';
@@ -12,6 +14,11 @@ import { buildLRepeatMap, nameKey } from './lrepeats.js';
 
 async function run(): Promise<void> {
   const cfg = loadConfig(process.env);
+  // OTP自動入力: IMAP設定がある時だけ有効（無ければOTP画面遭遇時に明示エラーで停止）
+  const otpProvider: OtpProvider | undefined =
+    cfg.otpImapUser && cfg.otpImapPassword
+      ? (since) => waitForOtpCode(createImapOtpFetcher({ user: cfg.otpImapUser!, password: cfg.otpImapPassword! }), since)
+      : undefined;
   const now = new Date();
   const jst = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit' }).format(now);
   const [y, m] = jst.split('-').map(Number);
@@ -23,6 +30,7 @@ async function run(): Promise<void> {
   const csv = await fetchReservationsCsv({
     baseUrl: cfg.baseUrl, loginId: cfg.loginId, password: cfg.password,
     from, to, statuses: ['fixed', 'temporary_fixed', 'joined', 'requested'],
+    otpProvider, storageStatePath: cfg.storageStatePath,
   });
 
   const events = csvToEvents(csv, DEFAULT_SYNC_CONFIG);
@@ -52,7 +60,7 @@ async function run(): Promise<void> {
         // 履歴CSVは一括取得だと重く504になるため、暦年レンジに分割して取得・連結する
         const ranges = yearlyRanges(new Date('2015-01-01T00:00:00+09:00'), now);
         const bodies = await fetchReservationsCsvRanges(
-          { baseUrl: cfg.baseUrl, loginId: cfg.loginId, password: cfg.password, statuses: ['joined'] },
+          { baseUrl: cfg.baseUrl, loginId: cfg.loginId, password: cfg.password, statuses: ['joined'], otpProvider, storageStatePath: cfg.storageStatePath },
           ranges,
           { retries: 2 },
         );

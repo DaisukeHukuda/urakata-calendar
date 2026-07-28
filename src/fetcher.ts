@@ -1,5 +1,7 @@
+import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { chromium } from 'playwright';
-import type { Browser, Page } from 'playwright';
+import type { BrowserContext, Page } from 'playwright';
 
 export interface FetchOptions {
   baseUrl: string; // 例 https://supsup.urkt.in/
@@ -9,6 +11,7 @@ export interface FetchOptions {
   to: Date; // 参加日 to
   statuses: string[]; // 例 ['fixed', 'temporary_fixed']
   otpProvider?: OtpProvider; // OTP画面遭遇時にメールから認証コードを取得する（未設定なら明示エラー）
+  storageStatePath?: string; // ログイン状態(storageState)の保存先（未設定なら保存しない）
 }
 
 // 実機（2026-06-18）で確認したウラカタ検索のクエリパラメータ名
@@ -58,7 +61,7 @@ function buildCsvUrl(o: FetchOptions): string {
 }
 
 // ログインに必要な認証情報（from/to なしの FetchOptions サブセット）
-type LoginCreds = Pick<FetchOptions, 'baseUrl' | 'loginId' | 'password'>;
+type LoginCreds = Pick<FetchOptions, 'baseUrl' | 'loginId' | 'password' | 'otpProvider' | 'storageStatePath'>;
 
 /** OTP画面で認証コードを取ってくる関数（実装は otp-mail.ts。main.ts で結線） */
 export type OtpProvider = (since: Date) => Promise<string>;
@@ -174,19 +177,52 @@ function assertCsvBody(body: string): void {
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 /**
+ * 認証済み BrowserContext を用意して fn を実行する共通処理。
+ * - storageStatePath があり保存済み state があれば復元して使う（既ログイン→OTP不要）
+ * - ログイン成功後に state を保存する（信頼デバイスCookieを次回実行へ引き継ぐ）
+ * - 保存済み state 使用時に fn が失敗（=実は未ログインでCSV検証NG等）なら、
+ *   state を破棄してフルログインで1回だけやり直す（30日期限切れの自動復旧）
+ */
+async function withAuthedContext<T>(
+  o: LoginCreds,
+  fn: (context: BrowserContext) => Promise<T>,
+): Promise<T> {
+  const statePath = o.storageStatePath;
+
+  const attempt = async (useSavedState: boolean): Promise<T> => {
+    const browser = await chromium.launch();
+    try {
+      const restore = useSavedState && statePath !== undefined && existsSync(statePath);
+      const context = await browser.newContext(restore ? { storageState: statePath } : {});
+      const page = await context.newPage();
+      await loginUrakata(page, o, { otpProvider: o.otpProvider });
+      if (statePath !== undefined) {
+        mkdirSync(dirname(statePath), { recursive: true });
+        await context.storageState({ path: statePath });
+      }
+      return await fn(context);
+    } finally {
+      await browser.close();
+    }
+  };
+
+  const hadSavedState = statePath !== undefined && existsSync(statePath);
+  try {
+    return await attempt(true);
+  } catch (e) {
+    if (!hadSavedState) throw e;
+    console.warn(`[fetcher] 保存済みログイン状態で失敗したため、状態を破棄して再ログインします: ${(e as Error).message}`);
+    rmSync(statePath!, { force: true });
+    return await attempt(false);
+  }
+}
+
+/**
  * ウラカタにログインし、指定範囲の予約CSV本文を返す。
  * ログイン失敗・CSV取得失敗・想定外レスポンス時は例外を投げる（空文字は返さない）。
  */
 export async function fetchReservationsCsv(o: FetchOptions): Promise<string> {
-  let browser: Browser | undefined;
-  try {
-    browser = await chromium.launch();
-    const context = await browser.newContext();
-    const page = await context.newPage();
-
-    await loginUrakata(page, o, { otpProvider: o.otpProvider });
-
-    // --- 認証済みクッキーを共有する request コンテキストでCSVを取得 ---
+  return withAuthedContext(o, async (context) => {
     const csvUrl = buildCsvUrl(o);
     // 履歴(2015〜)CSVは大きいためタイムアウトを延長（既定30秒→2分）
     const resp = await context.request.get(csvUrl, { timeout: 120000 });
@@ -196,9 +232,7 @@ export async function fetchReservationsCsv(o: FetchOptions): Promise<string> {
     const body = await resp.text();
     assertCsvBody(body);
     return body;
-  } finally {
-    await browser?.close();
-  }
+  });
 }
 
 /**
@@ -213,14 +247,7 @@ export async function fetchReservationsCsvRanges(
   opts?: { retries?: number },
 ): Promise<string[]> {
   const retries = opts?.retries ?? 2;
-  let browser: Browser | undefined;
-  try {
-    browser = await chromium.launch();
-    const context = await browser.newContext();
-    const page = await context.newPage();
-
-    await loginUrakata(page, base, { otpProvider: base.otpProvider });
-
+  return withAuthedContext(base, async (context) => {
     const bodies: string[] = [];
     for (const range of ranges) {
       const csvUrl = buildCsvUrl({ ...base, from: range.from, to: range.to });
@@ -247,7 +274,5 @@ export async function fetchReservationsCsvRanges(
       bodies.push(body);
     }
     return bodies;
-  } finally {
-    await browser?.close();
-  }
+  });
 }
