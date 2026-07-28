@@ -25,19 +25,23 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 /**
  * since 以降に届くOTPメールをポーリングで待ち、認証コードを返す。
  * 既定: 5秒間隔・最大3分。時間内に届かなければ日本語メッセージで例外。
+ * since には既定90秒の猶予を持たせる（GitHubランナーの時計がメールサーバーより
+ * 進んでいると、ログイン直後に届いたメールを「since より古い」と誤判定して
+ * 永遠に見つけられなくなるため。2026-07-29 の本番障害で実際に発生）。
  */
 export async function waitForOtpCode(
   fetchMails: OtpMailFetcher,
   since: Date,
-  opts: { timeoutMs?: number; intervalMs?: number } = {},
+  opts: { timeoutMs?: number; intervalMs?: number; graceMs?: number } = {},
 ): Promise<string> {
   const timeoutMs = opts.timeoutMs ?? 180_000;
   const intervalMs = opts.intervalMs ?? 5_000;
+  const graceMs = opts.graceMs ?? 90_000;
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     const mails = await fetchMails(since);
     const newest = mails
-      .filter((m) => m.receivedAt.getTime() >= since.getTime())
+      .filter((m) => m.receivedAt.getTime() >= since.getTime() - graceMs)
       .sort((a, b) => b.receivedAt.getTime() - a.receivedAt.getTime());
     for (const mail of newest) {
       const code = extractOtpCode(mail.text);

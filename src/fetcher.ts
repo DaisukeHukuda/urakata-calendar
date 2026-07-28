@@ -102,7 +102,16 @@ interface LoginDeps {
 async function loginUrakata(page: Page, o: LoginCreds, deps: LoginDeps = {}): Promise<void> {
   await page.goto(o.baseUrl, { waitUntil: 'networkidle' });
   let stage = await currentStage(page);
-  if (stage === 'loggedIn') return;
+  if (stage === 'loggedIn') {
+    console.log('[fetcher] 保存済みログイン状態で認証済み（OTPなし）');
+    return;
+  }
+  if (stage === 'otp') {
+    // 復元した状態が「認証コード入力待ち」に巻き戻されている（別マシンからのアクセスで
+    // セッションが格下げされた等）。ID/PWを送信していないので新しいコードは飛んでこない。
+    // この状態は使えないため例外にし、呼び出し側(withAuthedContext)の状態破棄→再ログインに任せる。
+    throw new Error('保存済みログイン状態が無効になっています（認証コード入力を要求された）');
+  }
 
   if (stage === 'loginForm') {
     // OTPメールはログイン送信時に発射されるため、送信直前の時刻を since にする
@@ -140,17 +149,23 @@ async function completeOtp(page: Page, since: Date, deps: LoginDeps): Promise<vo
 
   // 「このデバイスを信頼する」にチェック（30日間OTP免除）。ラベルで見つからなければ
   // 画面上に唯一のチェックボックスがある場合のみそれを使う。見つからなくても続行。
+  // どの経路になったかは運用ログで判別できるよう必ず出力する（信頼が効かない原因調査用）。
   const trustByLabel = page.getByLabel(/このデバイスを信頼/);
   if ((await trustByLabel.count()) > 0) {
     await trustByLabel.first().check().catch(() => {/* チェック不可でも続行 */});
+    console.log('[fetcher] 「このデバイスを信頼する」をチェックしました');
   } else {
     const checkboxes = page.locator('input[type="checkbox"]');
     if ((await checkboxes.count()) === 1) {
       await checkboxes.first().check().catch(() => {/* チェック不可でも続行 */});
+      console.log('[fetcher] 信頼チェックボックス（ラベル不一致・唯一のcheckbox）をチェックしました');
+    } else {
+      console.warn(`[fetcher] 信頼チェックボックスが見つかりません（checkbox数=${await checkboxes.count()}）。毎回OTPになる可能性`);
     }
   }
 
   const code = await deps.otpProvider(since);
+  console.log('[fetcher] OTP認証コードをメールから取得して入力します');
 
   // コード入力欄: ラベル→種別の順で探す
   const byLabel = page.getByLabel(/認証コード/);
