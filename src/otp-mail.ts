@@ -70,7 +70,12 @@ export function createImapOtpFetcher(cfg: { user: string; password: string; host
     });
     await client.connect();
     try {
-      await client.mailboxOpen('INBOX');
+      // 「すべてのメール」を開く（受信箱スキップのフィルタでアーカイブされたOTPメールも読めるように）。
+      // Gmailのフォルダ名はUI言語でローカライズされるため、special-use属性(\All)で探す。
+      // 見つからなければ INBOX にフォールバック。
+      const boxes = await client.list();
+      const allMail = boxes.find((b) => b.specialUse === '\\All');
+      await client.mailboxOpen(allMail ? allMail.path : 'INBOX');
       const uids = await client.search({ since }, { uid: true });
       const recent = (uids || []).slice(-10); // 直近10通で十分（search は失敗時 false を返す）
       const out: OtpMailRecord[] = [];
