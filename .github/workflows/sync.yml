@@ -9,7 +9,7 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -26,6 +26,13 @@ jobs:
           restore-keys: |
             playwright-${{ runner.os }}-
       - run: npx playwright install --with-deps chromium
+      - name: Restore login state
+        uses: actions/cache/restore@v4
+        with:
+          path: .auth
+          key: urakata-auth-${{ github.run_id }}
+          restore-keys: |
+            urakata-auth-
       - run: npm run sync
         env:
           URAKATA_URL: ${{ secrets.URAKATA_URL }}
@@ -38,3 +45,12 @@ jobs:
           WEB_INGEST_SECRET: ${{ secrets.WEB_INGEST_SECRET }}
           HISTORY_SALT: ${{ secrets.HISTORY_SALT }}
           HISTORY_SYNC_HOURS: ${{ vars.HISTORY_SYNC_HOURS }}
+          OTP_IMAP_USER: ${{ secrets.OTP_IMAP_USER }}
+          OTP_IMAP_PASSWORD: ${{ secrets.OTP_IMAP_PASSWORD }}
+          STORAGE_STATE_PATH: .auth/storage-state.json
+      - name: Save login state
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .auth
+          key: urakata-auth-${{ github.run_id }}
