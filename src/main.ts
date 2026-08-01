@@ -22,7 +22,9 @@ async function run(): Promise<void> {
   const now = new Date();
   const jst = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit' }).format(now);
   const [y, m] = jst.split('-').map(Number);
-  const from = new Date(Date.UTC(y, m - 1, 1, -9, 0, 0)); // 月初00:00 JST
+  // 前月の月初00:00 JST から取得（月が変わった直後も過去1ヶ月分をカレンダー/webに表示し続けるため。
+  // Date.UTC は month が負でも前年へ正しく繰り下がる）
+  const from = new Date(Date.UTC(y, m - 2, 1, -9, 0, 0));
   const to = new Date(now.getTime() + cfg.syncDaysAhead * 24 * 60 * 60000);
 
   console.log(`[sync] fetch ${from.toISOString()} .. ${to.toISOString()}`);
